@@ -1,6 +1,6 @@
 # PrismBlade
 
-**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current version, `v0.1.2`, focuses on the simulator monitoring experience, image-assist tools, LUT import flow, bottom camera controls, exposure-mode-aware parameter rules, and a mock camera transport boundary.
+**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current version, `v0.1.3`, focuses on the simulator monitoring experience, image-assist tools, LUT import flow, bottom camera controls, exposure-mode-aware parameter rules, a mock camera transport boundary, and the monitor interaction fixes from the v0.1.3 technical spec.
 
 > Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
@@ -36,7 +36,9 @@ The app is intentionally built around replaceable boundaries:
   - `S`: shutter enabled; aperture locked.
   - `P`: aperture and shutter locked.
   - `Auto`: aperture, shutter, ISO, and white balance locked.
-- Short inline feedback when a locked parameter is tapped.
+- Global short feedback banner when a locked parameter is tapped, a camera action completes, or a command fails.
+- Tap the empty preview area to close the current camera parameter adjustment panel.
+- Scope overlay avoidance when the camera parameter adjustment panel is open.
 - LUT manager with built-in descriptors and `.cube` file import.
 - `.cube` parser with validation for `TITLE`, `LUT_3D_SIZE`, `DOMAIN_MIN`, `DOMAIN_MAX`, comments, and RGB data rows.
 - LUT metadata persistence through a JSON index in the app documents directory.
@@ -191,7 +193,7 @@ Use the floating tool buttons to toggle monitor assists:
 - Magnifier icon: cycles zoom mode.
 - Gear icon: opens settings.
 
-The scope panel is intentionally compact in `v0.1.2`: waveform and RGB Parade use about 40% of the screen width so they do not dominate the monitored image.
+The scope panel is intentionally compact in `v0.1.3`: waveform and RGB Parade use about 40% of the screen width so they do not dominate the monitored image. When the camera parameter adjustment panel is open, the scope panel moves upward to avoid overlapping the bottom controls.
 
 ### LUT Import
 
@@ -222,6 +224,8 @@ Available mock controls:
 
 Tap a parameter value to open a compact adjustment panel. The adjustment panel uses discrete slider steps from the mock capability table, so the UI cannot generate unsupported arbitrary values.
 
+Tap the empty preview area, tap the same parameter again, or use the close button to dismiss the adjustment panel. This state is owned by `MonitorScreen`, so preview gestures and scope layout use the same source of truth.
+
 Exposure mode affects parameter availability:
 
 ```text
@@ -232,7 +236,7 @@ P:    aperture and shutter locked
 Auto: aperture, shutter, ISO, and white balance locked
 ```
 
-Locked parameters are dimmed. Tapping one shows a short reason instead of opening the slider. The same rule is enforced in `MonitorSession`, `CameraCommandService`, and `MockCameraTransport`.
+Locked parameters are dimmed. Tapping one shows a short reason in the global message banner instead of opening the slider. The same rule is enforced in `MonitorSession`, `CameraCommandService`, and `MockCameraTransport`.
 
 The settings screen also includes mock debug actions for reconnecting and simulating a disconnect.
 
@@ -246,10 +250,13 @@ Important implementation decisions are documented with inline comments in the Sw
 - Why exposure mode lives in `CameraState`, not local UI state.
 - Why parameter availability has both `isWritable` and exposure-mode rules.
 - Why disabled parameters are checked in UI, command service, and mock transport.
+- Why short user messages are shown outside the parameter adjustment panel.
+- Why camera parameter selection is owned by `MonitorScreen`.
 - Why the mock transport validates values.
 - Why out-of-range LUT values are clamped in the prototype parser.
 - Why LUT preview tint is only a temporary UI placeholder.
 - Why the scope overlay is constrained to 40% width.
+- Why the scope overlay uses dynamic bottom avoidance when the parameter adjustment panel is open.
 
 The code intentionally favors reviewable boundaries over early performance optimization. Many comments are inline because this project is still shaping the real camera and rendering contracts.
 
@@ -318,5 +325,6 @@ Recommended next development steps:
 ## Reference Documents
 
 - [Prototype Design](PROTOTYPE_DESIGN.md)
+- [Technical Spec v0.1.3](TECHNICAL_SPEC_v0.1.3.md)
 - [Technical Spec v0.1.2](TECHNICAL_SPEC_v0.1.2.md)
 - [Technical Spec v0.1.1](TECHNICAL_SPEC_v0.1.1.md)

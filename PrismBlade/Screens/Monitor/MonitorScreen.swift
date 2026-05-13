@@ -3,6 +3,8 @@ import SwiftUI
 struct MonitorScreen: View {
     @ObservedObject var session: MonitorSession
     @State private var activeSheet: MonitorSheet?
+    // v0.1.3 将参数浮层状态上移到父级，便于预览区点击关闭和 Scope 动态避让共享状态。
+    @State private var selectedCameraParameter: CameraParameter?
 
     var body: some View {
         GeometryReader { proxy in
@@ -10,6 +12,8 @@ struct MonitorScreen: View {
             let usePortraitLayout = isPortrait && session.state.orientation.allowsPortraitMonitoring
             // v0.1.2 要求 Scope 不再大面积遮挡画面，宽度固定为当前画面宽度的 40%。
             let scopeWidth = proxy.size.width * 0.4
+            let hasParameterAdjuster = selectedCameraParameter != nil
+            let controlsAvoidance = MonitorLayoutMetrics.controlStackAvoidance(hasAdjuster: hasParameterAdjuster)
 
             ZStack(alignment: .bottom) {
                 Color.black.ignoresSafeArea()
@@ -21,6 +25,11 @@ struct MonitorScreen: View {
                     isPortraitLayout: usePortraitLayout
                 )
                 .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    // 点击监看画面空白处只负责收起参数浮层，不改变任何相机状态。
+                    selectedCameraParameter = nil
+                }
 
                 VStack(spacing: 0) {
                     statusBar
@@ -37,17 +46,28 @@ struct MonitorScreen: View {
                             .padding(.leading, usePortraitLayout ? 12 : 72)
                             Spacer()
                         }
-                        .padding(.bottom, usePortraitLayout ? 86 : 82)
+                        // Scope 根据底部控制条和调整浮层动态避让，避免 v0.1.2 中可能出现的重叠。
+                        .padding(.bottom, controlsAvoidance)
                     }
                 }
 
                 toolRails(usePortraitLayout: usePortraitLayout)
 
+                if let message = session.lastUserMessage {
+                    UserMessageBanner(message: message)
+                        .padding(.horizontal, usePortraitLayout ? 12 : 80)
+                        // 短提示脱离调整浮层独立展示，禁用项点击时也能被用户看到。
+                        .padding(.bottom, controlsAvoidance + MonitorLayoutMetrics.messageGap)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
                 // 相机控制从 v0.1.1 的右侧面板改为 v0.1.2 的底部常驻控制条。
-                CameraControlPanel(session: session)
+                CameraControlPanel(session: session, selectedParameter: $selectedCameraParameter)
                     .padding(.horizontal, usePortraitLayout ? 8 : 12)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, MonitorLayoutMetrics.controlBarBottomPadding)
             }
+            .animation(.easeInOut(duration: 0.18), value: selectedCameraParameter)
+            .animation(.easeInOut(duration: 0.18), value: session.lastUserMessage)
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
                 case .settings:
@@ -154,4 +174,38 @@ private enum MonitorSheet: String, Identifiable {
     case lutManager
 
     var id: String { rawValue }
+}
+
+enum MonitorLayoutMetrics {
+    static let controlBarBottomPadding: CGFloat = 8
+    static let controlBarHeight: CGFloat = 60
+    static let controlPanelSpacing: CGFloat = 8
+    static let parameterAdjusterHeight: CGFloat = 118
+    static let scopeToControlsGap: CGFloat = 10
+    static let messageGap: CGFloat = 8
+
+    static func controlStackAvoidance(hasAdjuster: Bool) -> CGFloat {
+        // 这里用稳定估算值约束 overlay 避让；调整浮层本身也设置最小高度来减少布局抖动。
+        controlBarBottomPadding +
+            controlBarHeight +
+            scopeToControlsGap +
+            (hasAdjuster ? controlPanelSpacing + parameterAdjusterHeight : 0)
+    }
+}
+
+private struct UserMessageBanner: View {
+    let message: String
+
+    var body: some View {
+        Text(message)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.yellow)
+            .lineLimit(2)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.black.opacity(0.74))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityLabel(message)
+    }
 }

@@ -2,8 +2,8 @@ import SwiftUI
 
 struct CameraControlPanel: View {
     @ObservedObject var session: MonitorSession
-    // 记录当前正在调整的参数；nil 表示只显示底部常驻参数条。
-    @State private var selectedParameter: CameraParameter?
+    // 选中参数由 MonitorScreen 持有，预览区点击和 Scope 避让都需要读取同一份状态。
+    @Binding var selectedParameter: CameraParameter?
 
     // v0.1.2 要求底部直接暴露这些核心相机参数，顺序贴近相机监看常用读取顺序。
     private let visibleParameters: [CameraParameter] = [
@@ -163,14 +163,9 @@ struct CameraControlPanel: View {
                     .foregroundStyle(.white.opacity(0.62))
             }
 
-            if let message = session.lastUserMessage {
-                Text(message)
-                    .font(.caption2)
-                    .foregroundStyle(.yellow)
-                    .lineLimit(1)
-            }
         }
         .padding(12)
+        .frame(minHeight: MonitorLayoutMetrics.parameterAdjusterHeight)
         .background(.black.opacity(0.76))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }

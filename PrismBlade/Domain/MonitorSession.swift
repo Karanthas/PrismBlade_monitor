@@ -6,7 +6,7 @@ final class MonitorSession: ObservableObject {
     // MonitorSession 是主 UI 状态容器；所有 @Published 更新固定在 MainActor，避免 SwiftUI 跨线程刷新。
     @Published private(set) var state = MonitorSessionState()
     @Published private(set) var latestFrame = VideoFrame.placeholder
-    @Published var lastUserMessage: String?
+    @Published private(set) var lastUserMessage: String?
 
     private let frameSource: FrameSource
     private let cameraService: CameraCommandService
@@ -15,6 +15,7 @@ final class MonitorSession: ObservableObject {
 
     private var frameTask: Task<Void, Never>?
     private var cameraEventTask: Task<Void, Never>?
+    private var messageClearTask: Task<Void, Never>?
 
     init(
         frameSource: FrameSource,
@@ -30,6 +31,7 @@ final class MonitorSession: ObservableObject {
     deinit {
         frameTask?.cancel()
         cameraEventTask?.cancel()
+        messageClearTask?.cancel()
     }
 
     func startMonitoring() {
@@ -48,7 +50,7 @@ final class MonitorSession: ObservableObject {
                 }
             } catch {
                 await MainActor.run {
-                    self.lastUserMessage = "帧源启动失败：\(error.localizedDescription)"
+                    self.showUserMessage("帧源启动失败：\(error.localizedDescription)")
                 }
             }
         }
@@ -161,7 +163,30 @@ final class MonitorSession: ObservableObject {
 
     func showDisabledParameterReason(for parameter: CameraParameter) {
         // UI 点击禁用项时只展示提示，不提交命令，也不打开调整浮层。
-        lastUserMessage = availability(for: parameter).reason
+        showUserMessage(availability(for: parameter).reason)
+    }
+
+    func showUserMessage(_ message: String?) {
+        // 所有短提示都走同一个入口，方便统一做自动消失、后续分级和可访问性处理。
+        messageClearTask?.cancel()
+
+        guard let message, !message.isEmpty else {
+            lastUserMessage = nil
+            return
+        }
+
+        lastUserMessage = message
+        let messageSnapshot = message
+
+        messageClearTask = Task { [weak self] in
+            // 短提示给用户足够时间读完，但不长期占用监看画面。
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard self?.lastUserMessage == messageSnapshot else { return }
+                self?.lastUserMessage = nil
+            }
+        }
     }
 
     func importLUT(from url: URL) async {
@@ -184,7 +209,7 @@ final class MonitorSession: ObservableObject {
         let availability = availability(for: parameter)
         guard availability.isEnabled else {
             // UI 层提交前先拦一次，降低无效 async 命令和错误噪音。
-            lastUserMessage = availability.reason
+            showUserMessage(availability.reason)
             return
         }
 
@@ -200,7 +225,7 @@ final class MonitorSession: ObservableObject {
                     defaults.set(value, forKey: DefaultsKey.mockExposureMode)
                 }
             } catch {
-                lastUserMessage = "相机参数提交失败：\(error.localizedDescription)"
+                showUserMessage("相机参数提交失败：\(error.localizedDescription)")
                 markCameraParameter(parameter, isSubmitting: false)
             }
         }
@@ -212,9 +237,9 @@ final class MonitorSession: ObservableObject {
                 // 录制、拍照、对焦统一走 action 通道，避免伪装成普通参数写入。
                 let updated = try await cameraService.trigger(action)
                 state.camera = updated
-                lastUserMessage = action.successMessage
+                showUserMessage(action.successMessage)
             } catch {
-                lastUserMessage = "相机动作失败：\(error.localizedDescription)"
+                showUserMessage("相机动作失败：\(error.localizedDescription)")
             }
         }
     }
