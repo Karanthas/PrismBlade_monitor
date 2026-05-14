@@ -19,6 +19,13 @@ Build/
 # Local real camera/video materials
 material/
 
+# Local LUT files, including vendor LUTs that may not be redistributable.
+PrismBlade/Resources/LUTs/*.cube
+PrismBlade/Resources/LUTs/*.3dl
+PrismBlade/Resources/LUTs/*.mga
+PrismBlade/Resources/LUTs/*.zip
+!PrismBlade/Resources/LUTs/README.md
+
 # Swift Package Manager
 .build/
 .swiftpm/

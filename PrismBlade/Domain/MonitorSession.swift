@@ -7,6 +7,7 @@ final class MonitorSession: ObservableObject {
     @Published private(set) var state = MonitorSessionState()
     @Published private(set) var latestFrame = VideoFrame.placeholder
     @Published private(set) var lastUserMessage: String?
+    let lutStore: LUTStore
 
     private let frameSource: FrameSource
     private let cameraService: CameraCommandService
@@ -25,6 +26,7 @@ final class MonitorSession: ObservableObject {
         self.frameSource = frameSource
         self.cameraService = cameraService
         self.lutRepository = lutRepository
+        lutStore = LUTStore(repository: lutRepository)
         restorePersistentState()
     }
 
@@ -275,7 +277,7 @@ final class MonitorSession: ObservableObject {
 
     private func restorePersistentState() {
         // restore 只恢复本地 UI 偏好；真正相机参数会在 connectMockCamera 后再次从 transport 对齐。
-        state.lut.builtInLUTs = LUTDescriptor.builtIn
+        state.lut.builtInLUTs = lutStore.loadBuiltInDescriptors()
         state.lut.importedLUTs = lutRepository.loadImportedDescriptors()
         state.orientation.allowsPortraitMonitoring = defaults.bool(forKey: DefaultsKey.allowsPortraitMonitoring)
 

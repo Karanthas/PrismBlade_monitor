@@ -20,7 +20,9 @@ struct MonitorScreen: View {
 
                 MetalPreviewSurface(
                     frame: session.latestFrame,
-                    monitor: session.state.monitor
+                    monitor: session.state.monitor,
+                    lut: session.state.lut,
+                    lutStore: session.lutStore
                 )
                 .ignoresSafeArea()
                 .contentShape(Rectangle())

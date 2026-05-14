@@ -12,7 +12,7 @@ struct LUTState: Equatable {
     static let initial = LUTState(
         selectedLUT: nil,
         importedLUTs: [],
-        builtInLUTs: LUTDescriptor.builtIn,
+        builtInLUTs: [],
         intensity: 1,
         isEnabled: false,
         lastImportError: nil
@@ -27,36 +27,6 @@ struct LUTDescriptor: Identifiable, Codable, Hashable {
     var cubeSize: Int
     var previewTintHex: String
     var warnings: [String]
-
-    static let builtIn: [LUTDescriptor] = [
-        LUTDescriptor(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000101")!,
-            title: "Neutral Monitor",
-            source: .builtIn,
-            fileName: nil,
-            cubeSize: 17,
-            previewTintHex: "#FFFFFF",
-            warnings: []
-        ),
-        LUTDescriptor(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000102")!,
-            title: "Warm Contrast Check",
-            source: .builtIn,
-            fileName: nil,
-            cubeSize: 17,
-            previewTintHex: "#FFC27A",
-            warnings: []
-        ),
-        LUTDescriptor(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000103")!,
-            title: "Cool Shadow Check",
-            source: .builtIn,
-            fileName: nil,
-            cubeSize: 17,
-            previewTintHex: "#75B8FF",
-            warnings: []
-        )
-    ]
 
     var tintColor: Color {
         Color(hex: previewTintHex)
@@ -85,6 +55,7 @@ enum LUTImportError: Error, Equatable, LocalizedError {
     case invalidRGBLine(line: Int, value: String)
     case dataCountMismatch(expected: Int, actual: Int)
     case sizeTooLarge(Int)
+    case missingLUTFile(String)
 
     var errorDescription: String? {
         switch self {
@@ -102,6 +73,8 @@ enum LUTImportError: Error, Equatable, LocalizedError {
             return "LUT 数据数量不匹配，需要 \(expected) 行，实际 \(actual) 行"
         case .sizeTooLarge(let size):
             return "LUT 尺寸过大：\(size)"
+        case .missingLUTFile(let fileName):
+            return "找不到 LUT 文件：\(fileName)"
         }
     }
 }

@@ -30,6 +30,12 @@
 		AA0000000000000000000131 /* MetalPreviewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000234 /* MetalPreviewRenderer.swift */; };
 		AA0000000000000000000132 /* MetalPreviewSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000235 /* MetalPreviewSurface.swift */; };
 		AA0000000000000000000133 /* PreviewShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000236 /* PreviewShaders.metal */; };
+		AA0000000000000000000135 /* LUTStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000238 /* LUTStore.swift */; };
+		AA0000000000000000000136 /* LUTPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000239 /* LUTPass.swift */; };
+		AA0000000000000000000137 /* LUTRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000240 /* LUTRepositoryTests.swift */; };
+		AA0000000000000000000138 /* LUTPassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000241 /* LUTPassTests.swift */; };
+		AA0000000000000000000139 /* MetalLUTShaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000242 /* MetalLUTShaderTests.swift */; };
+		AA0000000000000000000140 /* LUTs in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000243 /* LUTs */; };
 		AA0000000000000000000120 /* PixelBufferFixtureFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000220 /* PixelBufferFixtureFactory.swift */; };
 		AA0000000000000000000121 /* CubeFixtureFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000221 /* CubeFixtureFactory.swift */; };
 		AA0000000000000000000122 /* CPUReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000222 /* CPUReference.swift */; };
@@ -91,6 +97,12 @@
 		AA0000000000000000000235 /* MetalPreviewSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalPreviewSurface.swift; sourceTree = "<group>"; };
 		AA0000000000000000000236 /* PreviewShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = PreviewShaders.metal; sourceTree = "<group>"; };
 		AA0000000000000000000237 /* MetalTextureBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalTextureBridgeTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000238 /* LUTStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTStore.swift; sourceTree = "<group>"; };
+		AA0000000000000000000239 /* LUTPass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTPass.swift; sourceTree = "<group>"; };
+		AA0000000000000000000240 /* LUTRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTRepositoryTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000241 /* LUTPassTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTPassTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000242 /* MetalLUTShaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalLUTShaderTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000243 /* LUTs */ = {isa = PBXFileReference; lastKnownFileType = folder; path = LUTs; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -141,6 +153,7 @@
 				AA0000000000000000000407 /* Video */,
 				AA0000000000000000000416 /* Metal */,
 				AA0000000000000000000408 /* Imaging */,
+				AA0000000000000000000417 /* Resources */,
 				AA0000000000000000000409 /* Screens */,
 			);
 			path = PrismBlade;
@@ -188,8 +201,18 @@
 			children = (
 				AA0000000000000000000209 /* LUTParser.swift */,
 				AA0000000000000000000210 /* LUTRepository.swift */,
+				AA0000000000000000000238 /* LUTStore.swift */,
+				AA0000000000000000000239 /* LUTPass.swift */,
 			);
 			path = Imaging;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000417 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000243 /* LUTs */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		AA0000000000000000000416 /* Metal */ = {
@@ -253,6 +276,9 @@
 				AA0000000000000000000228 /* CPUReferenceTests.swift */,
 				AA0000000000000000000232 /* FrameSourceStage2Tests.swift */,
 				AA0000000000000000000237 /* MetalTextureBridgeTests.swift */,
+				AA0000000000000000000240 /* LUTRepositoryTests.swift */,
+				AA0000000000000000000241 /* LUTPassTests.swift */,
+				AA0000000000000000000242 /* MetalLUTShaderTests.swift */,
 			);
 			path = PrismBladeTests;
 			sourceTree = "<group>";
@@ -356,6 +382,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000117 /* Assets.xcassets in Resources */,
+				AA0000000000000000000140 /* LUTs in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -395,6 +422,8 @@
 				AA0000000000000000000131 /* MetalPreviewRenderer.swift in Sources */,
 				AA0000000000000000000132 /* MetalPreviewSurface.swift in Sources */,
 				AA0000000000000000000133 /* PreviewShaders.metal in Sources */,
+				AA0000000000000000000135 /* LUTStore.swift in Sources */,
+				AA0000000000000000000136 /* LUTPass.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -413,6 +442,9 @@
 				AA0000000000000000000128 /* CPUReferenceTests.swift in Sources */,
 				AA0000000000000000000129 /* FrameSourceStage2Tests.swift in Sources */,
 				AA0000000000000000000134 /* MetalTextureBridgeTests.swift in Sources */,
+				AA0000000000000000000137 /* LUTRepositoryTests.swift in Sources */,
+				AA0000000000000000000138 /* LUTPassTests.swift in Sources */,
+				AA0000000000000000000139 /* MetalLUTShaderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

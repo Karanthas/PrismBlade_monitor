@@ -4,6 +4,8 @@ import SwiftUI
 struct MetalPreviewSurface: UIViewRepresentable {
     var frame: VideoFrame
     var monitor: MonitorState
+    var lut: LUTState
+    var lutStore: LUTStore
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -28,8 +30,12 @@ struct MetalPreviewSurface: UIViewRepresentable {
         view.device = device
 
         do {
-            let renderer = try MetalPreviewRenderer(device: device, colorPixelFormat: view.colorPixelFormat)
-            renderer.update(frame: frame, monitor: monitor)
+            let renderer = try MetalPreviewRenderer(
+                device: device,
+                colorPixelFormat: view.colorPixelFormat,
+                lutStore: lutStore
+            )
+            renderer.update(frame: frame, monitor: monitor, lut: lut)
             context.coordinator.renderer = renderer
             view.delegate = renderer
         } catch {
@@ -41,7 +47,7 @@ struct MetalPreviewSurface: UIViewRepresentable {
     }
 
     func updateUIView(_ view: MTKView, context: Context) {
-        context.coordinator.renderer?.update(frame: frame, monitor: monitor)
+        context.coordinator.renderer?.update(frame: frame, monitor: monitor, lut: lut)
     }
 
     final class Coordinator {
