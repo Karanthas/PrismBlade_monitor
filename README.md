@@ -1,26 +1,31 @@
 # PrismBlade
 
-**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch is moving through the `v0.2.1` Metal-first plan. Stage 1 is complete: the project now has an XCTest target, generated image/LUT fixtures, CPU reference helpers, and automated protection for the existing LUT parser and mock camera domain rules.
+**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch is moving through the `v0.2.1` Metal-first plan. Stage 2 is complete: the project now has a real `CVPixelBuffer` media frame model, a BGRA simulated frame source, an `AVAssetReader` video-file frame source, and XCTest coverage for the frame model and video reading path.
 
 > Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
 ## Status
 
-This repository currently contains a simulator-ready SwiftUI prototype plus the first `v0.2.1` testing foundation. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
+This repository currently contains a simulator-ready SwiftUI prototype plus the `v0.2.1` Stage 2 media-frame input foundation. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
 
 The app is intentionally built around replaceable boundaries:
 
-- `FrameSource` provides video frames and can later be replaced by a real live-view source.
+- `FrameSource` provides real `CVPixelBuffer` media frames and can later be replaced by a real live-view source.
+- `SimulatedFrameSource` now generates BGRA pixel buffers instead of only emitting animation phase state.
+- `VideoFileFrameSource` uses `AVAssetReader` to read local videos and emits the same `VideoFrame` type.
 - `CameraTransport` owns camera communication and can later be replaced by ImageCaptureCore, PTP, or a network bridge.
 - `CameraCommandService` validates camera writes before they reach the transport layer.
 - LUT parsing and repository logic are separate from the monitor UI.
-- SwiftUI owns layout and state presentation; the current rendered image is still a synthetic preview, not the final Metal pipeline.
+- SwiftUI owns layout and state presentation; the current rendered image is still a transitional synthetic preview, not the final Metal pipeline.
 - `PrismBladeTests` owns repeatable fixtures and CPU references so later Metal passes can be compared against deterministic expected values.
 
 ## Current Features
 
 - Landscape-first monitoring screen.
-- Synthetic simulated frame source with moving color blocks and a luminance ramp.
+- Synthetic simulated frame source that generates real BGRA `CVPixelBuffer` frames with moving color blocks and a luminance ramp.
+- Media frame model where `VideoFrame` carries `sequence`, `CMTime` timestamp, `FrameFormat`, `CVPixelBuffer`, and camera metadata.
+- Video-file frame source using `AVAssetReader` to read local `.mov` / video assets and output `CVPixelBuffer` frames.
+- Initial color-encoding detection through explicit hints, `REC709` / `NLOG` / `HLG` filename conventions, and video metadata markers.
 - Top status bar for connection state, input format, frame rate, LUT state, exposure tools, battery, and storage placeholders.
 - Left and right floating tool rails.
 - False color toggle.
@@ -54,11 +59,14 @@ The app is intentionally built around replaceable boundaries:
   - Record toggle
   - Capture action
   - Focus action
-- XCTest target for `v0.2.1` Stage 1:
+- XCTest target for `v0.2.1` Stages 1-2:
   - Pixel buffer fixture generation for small BGRA test images.
   - `.cube` fixture generation for valid and invalid LUT cases.
   - CPU reference helpers for luma, LUT sampling, zebra masks, and waveform bins.
   - Unit tests for `LUTParser`, `CameraExposureRules`, `CameraCommandService`, and `MockCameraTransport`.
+  - `VideoFrame` media-frame model tests.
+  - `SimulatedFrameSource` real pixel-buffer output tests.
+  - `VideoFileFrameSource` tests using temporary generated `.mov` fixtures for reading, timestamps, and color encoding.
 
 ## What Is Not Implemented Yet
 
@@ -66,7 +74,7 @@ The app is intentionally built around replaceable boundaries:
 - USB/PTP communication.
 - ImageCaptureCore integration.
 - `libgphoto2` integration.
-- Real video-file playback.
+- User-visible real video-file playback entry point.
 - Metal preview renderer.
 - Core Image / Metal 3D LUT sampling.
 - Real per-pixel false color and zebra processing.
@@ -108,6 +116,8 @@ PrismBlade/
     CameraTransport.swift
   Video/
     FrameSource.swift
+    SimulatedPixelBufferFactory.swift
+    VideoFileFrameSource.swift
   Imaging/
     LUTParser.swift
     LUTRepository.swift
@@ -129,6 +139,7 @@ PrismBladeTests/
     PixelBufferFixtureFactory.swift
   References/
     CPUReference.swift
+  FrameSourceStage2Tests.swift
   *Tests.swift
 ```
 
@@ -150,6 +161,7 @@ Domain State
 Video Input
   -> FrameSource
   -> SimulatedFrameSource
+  -> VideoFileFrameSource
 
 Imaging
   -> LUTParser
@@ -165,7 +177,7 @@ Tests
   -> PixelBufferFixtureFactory
   -> CubeFixtureFactory
   -> CPUReference
-  -> XCTest coverage for LUT and camera domain rules
+  -> XCTest coverage for frame sources, LUT, and camera domain rules
 ```
 
 `MonitorSession` is the main state container. It coordinates frame input, mock camera commands, settings persistence, LUT import state, exposure-mode availability, and UI-facing monitor state.
@@ -203,9 +215,9 @@ Expected result:
 ** BUILD SUCCEEDED **
 ```
 
-### Run Stage 1 Tests
+### Run Stage 2 Tests
 
-Stage 1 does not add a visible app feature. The effect you should verify is that the new test target builds and the automated tests pass.
+Stage 2 has only a small visible app impact. The important change is that the media frame model and frame-source boundary now use real `CVPixelBuffer` frames. The effect you should verify is that the test target builds and the simulated/video frame-source tests pass.
 
 #### Option A: Xcode
 
@@ -223,6 +235,7 @@ You should see these suites:
 - `CameraCommandServiceTests`
 - `MockCameraTransportTests`
 - `CPUReferenceTests`
+- `FrameSourceStage2Tests`
 
 #### Option B: Terminal
 
@@ -270,7 +283,19 @@ Expected result:
 ** TEST EXECUTE SUCCEEDED **
 ```
 
-The current Stage 1 suite contains 27 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
+The current Stage 2 suite contains 31 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
+
+### Local Real Materials
+
+Real Nikon / HLG / N-Log video samples live in the repository-root `material/` directory. This directory is listed in `.gitignore`; it is for local development and manual validation only, and should not be committed.
+
+Current filename convention:
+
+- `material/REC709.MOV`
+- `material/NLOG.MOV`
+- `material/HLG.MOV`
+
+Automated tests do not depend on those real materials. Stage 2 tests generate small temporary `.mov` fixtures to verify `AVAssetReader`. Later Stage 5/7 color conversion and real-material manual validation should use the files in `material/`.
 
 ### Monitor Screen
 
@@ -336,6 +361,9 @@ Important implementation decisions are documented with inline comments in the Sw
 
 - Why the app starts directly in monitoring mode.
 - Why frame input and camera commands are separated.
+- Why `VideoFrame` uses `CVPixelBuffer` as the media boundary.
+- Why the simulated frame source generates BGRA pixel buffers instead of keeping only animation phase.
+- Why the video-file frame source uses `AVAssetReader` instead of leaking `AVPlayer` into the frame-source or UI layers.
 - Why UI submission state does not leak into the transport boundary.
 - Why exposure mode lives in `CameraState`, not local UI state.
 - Why parameter availability has both `isWritable` and exposure-mode rules.
@@ -371,47 +399,38 @@ The simulator test build and test execution succeeded on an iPhone 17 Simulator.
 
 Recommended next development steps:
 
-1. Add the media frame model and frame source updates from `v0.2.1` Stage 2.
-   - Move `VideoFrame` toward real `CVPixelBuffer` payloads.
-   - Keep `phase` only as transitional simulator state if needed during the migration.
-   - Preserve the generated pixel-buffer fixtures as the test input source.
-
-2. Add a real Metal preview loop from `v0.2.1` Stage 3.
+1. Add a real Metal preview loop from `v0.2.1` Stage 3.
    - Introduce a `FrameProcessor`.
-   - Move the synthetic image logic behind a renderer-facing abstraction.
+   - Bridge `VideoFrame.pixelBuffer` into Metal textures through `CVMetalTextureCache`.
    - Add `MTKView`-backed preview rendering.
 
-3. Apply LUTs to pixels.
+2. Apply LUTs to pixels.
    - Convert parsed `.cube` data into a 3D texture or Core Image color cube.
    - Apply LUT intensity by blending original and LUT-processed output.
    - Keep the LUT operation display-only, not destructive.
 
-4. Replace placeholder exposure overlays.
+3. Replace placeholder exposure overlays.
    - Implement false color from luma values.
    - Implement zebra from threshold/range masks.
    - Keep these as display overlays or passes.
 
-5. Implement real scope analysis.
+4. Implement real scope analysis.
    - Sample frames at a reduced resolution.
    - Generate Luma waveform from pixel values.
    - Generate RGB Parade from channel values.
    - Add frame skipping to protect simulator and iPhone 12 Pro performance.
 
-6. Add `VideoFileFrameSource`.
-   - Use AVFoundation to read bundled or user-selected video.
-   - Keep `SimulatedFrameSource` as the default fallback.
-
-7. Continue expanding tests with each rendering slice.
+5. Continue expanding tests with each rendering slice.
    - Add offscreen Metal tests.
    - Compare Metal output against `CPUReference`.
    - Add video frame source and scope compute tests.
 
-8. Prepare real camera research adapters.
+6. Prepare real camera research adapters.
    - Keep `CameraTransport` stable.
    - Add empty adapter namespaces for ImageCaptureCore, PTP, and network bridge work.
    - Do not expose Nikon, USB, PTP, or `libgphoto2` types to SwiftUI.
 
-9. Perform hardware research later.
+7. Perform hardware research later.
    - Validate Nikon Z6III USB modes with iPhone 12 Pro.
    - Compare ImageCaptureCore capability coverage.
    - Decide whether USB/PTP, Nikon iPhone mode, Wi-Fi, USB-LAN, or a bridge service is the right production path.

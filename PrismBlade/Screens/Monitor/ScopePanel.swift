@@ -55,7 +55,9 @@ struct ScopePanel: View {
 
     private func drawWaveform(context: GraphicsContext, size: CGSize) {
         var path = Path()
-        let phase = frame.phase * Double.pi * 2
+        // ScopeComputePass 尚未进入阶段 2，本面板暂时保留程序曲线以保护旧交互。
+        // 关键点是 phase 不再属于 VideoFrame；媒体帧只携带 pixelBuffer 和元数据。
+        let phase = previewPhase * Double.pi * 2
 
         for x in stride(from: 0.0, through: size.width, by: 2) {
             let normalizedX = Double(x / max(size.width, 1))
@@ -79,7 +81,7 @@ struct ScopePanel: View {
         for channel in 0..<3 {
             var path = Path()
             let startX = CGFloat(channel) * channelWidth
-            let phaseOffset = frame.phase * Double.pi * 2 + Double(channel)
+            let phaseOffset = previewPhase * Double.pi * 2 + Double(channel)
 
             for localX in stride(from: 0.0, through: channelWidth, by: 2) {
                 let normalizedX = Double(localX / max(channelWidth, 1))
@@ -96,5 +98,9 @@ struct ScopePanel: View {
 
             context.stroke(path, with: .color(colors[channel].opacity(0.92)), lineWidth: 2)
         }
+    }
+
+    private var previewPhase: Double {
+        Double(frame.sequence % 240) / 240
     }
 }
