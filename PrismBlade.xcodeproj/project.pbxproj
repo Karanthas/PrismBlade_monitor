@@ -26,6 +26,10 @@
 		AA0000000000000000000117 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000217 /* Assets.xcassets */; };
 		AA0000000000000000000118 /* SimulatedPixelBufferFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000230 /* SimulatedPixelBufferFactory.swift */; };
 		AA0000000000000000000119 /* VideoFileFrameSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000231 /* VideoFileFrameSource.swift */; };
+		AA0000000000000000000130 /* MetalTextureBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000233 /* MetalTextureBridge.swift */; };
+		AA0000000000000000000131 /* MetalPreviewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000234 /* MetalPreviewRenderer.swift */; };
+		AA0000000000000000000132 /* MetalPreviewSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000235 /* MetalPreviewSurface.swift */; };
+		AA0000000000000000000133 /* PreviewShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000236 /* PreviewShaders.metal */; };
 		AA0000000000000000000120 /* PixelBufferFixtureFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000220 /* PixelBufferFixtureFactory.swift */; };
 		AA0000000000000000000121 /* CubeFixtureFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000221 /* CubeFixtureFactory.swift */; };
 		AA0000000000000000000122 /* CPUReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000222 /* CPUReference.swift */; };
@@ -36,6 +40,7 @@
 		AA0000000000000000000127 /* MockCameraTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000227 /* MockCameraTransportTests.swift */; };
 		AA0000000000000000000128 /* CPUReferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000228 /* CPUReferenceTests.swift */; };
 		AA0000000000000000000129 /* FrameSourceStage2Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000232 /* FrameSourceStage2Tests.swift */; };
+		AA0000000000000000000134 /* MetalTextureBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000237 /* MetalTextureBridgeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -81,6 +86,11 @@
 		AA0000000000000000000230 /* SimulatedPixelBufferFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimulatedPixelBufferFactory.swift; sourceTree = "<group>"; };
 		AA0000000000000000000231 /* VideoFileFrameSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoFileFrameSource.swift; sourceTree = "<group>"; };
 		AA0000000000000000000232 /* FrameSourceStage2Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSourceStage2Tests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000233 /* MetalTextureBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalTextureBridge.swift; sourceTree = "<group>"; };
+		AA0000000000000000000234 /* MetalPreviewRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalPreviewRenderer.swift; sourceTree = "<group>"; };
+		AA0000000000000000000235 /* MetalPreviewSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalPreviewSurface.swift; sourceTree = "<group>"; };
+		AA0000000000000000000236 /* PreviewShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = PreviewShaders.metal; sourceTree = "<group>"; };
+		AA0000000000000000000237 /* MetalTextureBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalTextureBridgeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -129,6 +139,7 @@
 				AA0000000000000000000405 /* Domain */,
 				AA0000000000000000000406 /* Camera */,
 				AA0000000000000000000407 /* Video */,
+				AA0000000000000000000416 /* Metal */,
 				AA0000000000000000000408 /* Imaging */,
 				AA0000000000000000000409 /* Screens */,
 			);
@@ -181,6 +192,17 @@
 			path = Imaging;
 			sourceTree = "<group>";
 		};
+		AA0000000000000000000416 /* Metal */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000233 /* MetalTextureBridge.swift */,
+				AA0000000000000000000234 /* MetalPreviewRenderer.swift */,
+				AA0000000000000000000235 /* MetalPreviewSurface.swift */,
+				AA0000000000000000000236 /* PreviewShaders.metal */,
+			);
+			path = Metal;
+			sourceTree = "<group>";
+		};
 		AA0000000000000000000409 /* Screens */ = {
 			isa = PBXGroup;
 			children = (
@@ -230,6 +252,7 @@
 				AA0000000000000000000227 /* MockCameraTransportTests.swift */,
 				AA0000000000000000000228 /* CPUReferenceTests.swift */,
 				AA0000000000000000000232 /* FrameSourceStage2Tests.swift */,
+				AA0000000000000000000237 /* MetalTextureBridgeTests.swift */,
 			);
 			path = PrismBladeTests;
 			sourceTree = "<group>";
@@ -368,6 +391,10 @@
 				AA0000000000000000000116 /* LUTManagerScreen.swift in Sources */,
 				AA0000000000000000000118 /* SimulatedPixelBufferFactory.swift in Sources */,
 				AA0000000000000000000119 /* VideoFileFrameSource.swift in Sources */,
+				AA0000000000000000000130 /* MetalTextureBridge.swift in Sources */,
+				AA0000000000000000000131 /* MetalPreviewRenderer.swift in Sources */,
+				AA0000000000000000000132 /* MetalPreviewSurface.swift in Sources */,
+				AA0000000000000000000133 /* PreviewShaders.metal in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -385,6 +412,7 @@
 				AA0000000000000000000127 /* MockCameraTransportTests.swift in Sources */,
 				AA0000000000000000000128 /* CPUReferenceTests.swift in Sources */,
 				AA0000000000000000000129 /* FrameSourceStage2Tests.swift in Sources */,
+				AA0000000000000000000134 /* MetalTextureBridgeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -18,11 +18,9 @@ struct MonitorScreen: View {
             ZStack(alignment: .bottom) {
                 Color.black.ignoresSafeArea()
 
-                SyntheticPreviewView(
+                MetalPreviewSurface(
                     frame: session.latestFrame,
-                    monitor: session.state.monitor,
-                    lut: session.state.lut,
-                    isPortraitLayout: usePortraitLayout
+                    monitor: session.state.monitor
                 )
                 .ignoresSafeArea()
                 .contentShape(Rectangle())

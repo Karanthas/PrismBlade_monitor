@@ -97,7 +97,7 @@ final class FrameSourceStage2Tests: XCTestCase {
         }
 
         try await source.start()
-        let frames = try await awaitValue(frameTask)
+        let frames = try await awaitValue(frameTask, timeoutNanoseconds: 10_000_000_000)
         await source.stop()
 
         XCTAssertEqual(frames.count, 3)

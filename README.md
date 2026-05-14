@@ -1,22 +1,25 @@
 # PrismBlade
 
-**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch is moving through the `v0.2.1` Metal-first plan. Stage 2 is complete: the project now has a real `CVPixelBuffer` media frame model, a BGRA simulated frame source, an `AVAssetReader` video-file frame source, and XCTest coverage for the frame model and video reading path.
+**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch is moving through the `v0.2.1` Metal-first plan. Stage 3 is complete: the project now has a real `CVPixelBuffer` media frame model, a BGRA simulated frame source, an `AVAssetReader` video-file frame source, and a minimal `CVPixelBuffer -> MTLTexture -> MTKView drawable` Metal preview loop.
 
 > Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
 ## Status
 
-This repository currently contains a simulator-ready SwiftUI prototype plus the `v0.2.1` Stage 2 media-frame input foundation. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
+This repository currently contains a simulator-ready SwiftUI prototype plus the `v0.2.1` Stage 3 Metal preview loop. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
 
 The app is intentionally built around replaceable boundaries:
 
 - `FrameSource` provides real `CVPixelBuffer` media frames and can later be replaced by a real live-view source.
 - `SimulatedFrameSource` now generates BGRA pixel buffers instead of only emitting animation phase state.
 - `VideoFileFrameSource` uses `AVAssetReader` to read local videos and emits the same `VideoFrame` type.
+- `MetalTextureBridge` uses `CVMetalTextureCache` to bridge BGRA `CVPixelBuffer` frames into `MTLTexture`.
+- `MetalPreviewRenderer` renders the latest media frame into an `MTKView` drawable through `MTKViewDelegate`.
+- `MetalPreviewSurface` wraps `MTKView` with `UIViewRepresentable` and reconnects the Metal surface to the SwiftUI monitor screen.
 - `CameraTransport` owns camera communication and can later be replaced by ImageCaptureCore, PTP, or a network bridge.
 - `CameraCommandService` validates camera writes before they reach the transport layer.
 - LUT parsing and repository logic are separate from the monitor UI.
-- SwiftUI owns layout and state presentation; the current rendered image is still a transitional synthetic preview, not the final Metal pipeline.
+- SwiftUI owns layout and state presentation; the live preview image is now drawn by Metal while toolbars, sheets, and bottom controls remain SwiftUI-owned.
 - `PrismBladeTests` owns repeatable fixtures and CPU references so later Metal passes can be compared against deterministic expected values.
 
 ## Current Features
@@ -26,6 +29,10 @@ The app is intentionally built around replaceable boundaries:
 - Media frame model where `VideoFrame` carries `sequence`, `CMTime` timestamp, `FrameFormat`, `CVPixelBuffer`, and camera metadata.
 - Video-file frame source using `AVAssetReader` to read local `.mov` / video assets and output `CVPixelBuffer` frames.
 - Initial color-encoding detection through explicit hints, `REC709` / `NLOG` / `HLG` filename conventions, and video metadata markers.
+- Metal texture bridging from BGRA `CVPixelBuffer` to `.bgra8Unorm` `MTLTexture`.
+- Metal main preview rendering with `MTLDevice`, `MTLCommandQueue`, a minimal render pipeline, and `PreviewShaders.metal`.
+- SwiftUI / Metal integration through an `MTKView` wrapped in `UIViewRepresentable`, replacing the SwiftUI gradient placeholder as the main preview.
+- Minimal Metal viewport scaling for fit, fill, 1x, and 2x.
 - Top status bar for connection state, input format, frame rate, LUT state, exposure tools, battery, and storage placeholders.
 - Left and right floating tool rails.
 - False color toggle.
@@ -59,7 +66,7 @@ The app is intentionally built around replaceable boundaries:
   - Record toggle
   - Capture action
   - Focus action
-- XCTest target for `v0.2.1` Stages 1-2:
+- XCTest target for `v0.2.1` Stages 1-3:
   - Pixel buffer fixture generation for small BGRA test images.
   - `.cube` fixture generation for valid and invalid LUT cases.
   - CPU reference helpers for luma, LUT sampling, zebra masks, and waveform bins.
@@ -67,6 +74,7 @@ The app is intentionally built around replaceable boundaries:
   - `VideoFrame` media-frame model tests.
   - `SimulatedFrameSource` real pixel-buffer output tests.
   - `VideoFileFrameSource` tests using temporary generated `.mov` fixtures for reading, timestamps, and color encoding.
+  - `MetalTextureBridge` test coverage for BGRA pixel-buffer to Metal texture bridging.
 
 ## What Is Not Implemented Yet
 
@@ -75,8 +83,8 @@ The app is intentionally built around replaceable boundaries:
 - ImageCaptureCore integration.
 - `libgphoto2` integration.
 - User-visible real video-file playback entry point.
-- Metal preview renderer.
-- Core Image / Metal 3D LUT sampling.
+- MetalFrameProcessor pass orchestration.
+- Metal 3D LUT texture creation and shader sampling.
 - Real per-pixel false color and zebra processing.
 - Scope analysis from actual pixel buffers.
 - Real camera exposure-mode reading.
@@ -92,6 +100,11 @@ The app is intentionally built around replaceable boundaries:
 - macOS with Xcode installed.
 - Xcode version that supports iOS 17+ projects.
 - iOS Simulator runtime.
+- Metal Toolchain component. If `.metal` compilation reports a missing toolchain, run:
+
+```sh
+/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -downloadComponent MetalToolchain
+```
 
 The project has been verified with:
 
@@ -118,13 +131,17 @@ PrismBlade/
     FrameSource.swift
     SimulatedPixelBufferFactory.swift
     VideoFileFrameSource.swift
+  Metal/
+    MetalTextureBridge.swift
+    MetalPreviewRenderer.swift
+    MetalPreviewSurface.swift
+    PreviewShaders.metal
   Imaging/
     LUTParser.swift
     LUTRepository.swift
   Screens/
     Monitor/
       MonitorScreen.swift
-      SyntheticPreviewView.swift
       ScopePanel.swift
       CameraControlPanel.swift
     Settings/
@@ -140,6 +157,7 @@ PrismBladeTests/
   References/
     CPUReference.swift
   FrameSourceStage2Tests.swift
+  MetalTextureBridgeTests.swift
   *Tests.swift
 ```
 
@@ -163,10 +181,15 @@ Video Input
   -> SimulatedFrameSource
   -> VideoFileFrameSource
 
+Metal Preview
+  -> MetalTextureBridge
+  -> MetalPreviewRenderer
+  -> MetalPreviewSurface
+  -> PreviewShaders.metal
+
 Imaging
   -> LUTParser
   -> LUTRepository
-  -> Synthetic preview overlays
 
 Camera
   -> CameraCommandService
@@ -177,7 +200,7 @@ Tests
   -> PixelBufferFixtureFactory
   -> CubeFixtureFactory
   -> CPUReference
-  -> XCTest coverage for frame sources, LUT, and camera domain rules
+  -> XCTest coverage for frame sources, Metal bridge, LUT, and camera domain rules
 ```
 
 `MonitorSession` is the main state container. It coordinates frame input, mock camera commands, settings persistence, LUT import state, exposure-mode availability, and UI-facing monitor state.
@@ -215,9 +238,9 @@ Expected result:
 ** BUILD SUCCEEDED **
 ```
 
-### Run Stage 2 Tests
+### Run Stage 3 Tests
 
-Stage 2 has only a small visible app impact. The important change is that the media frame model and frame-source boundary now use real `CVPixelBuffer` frames. The effect you should verify is that the test target builds and the simulated/video frame-source tests pass.
+Stage 3 moves the main preview from SwiftUI synthetic drawing to an `MTKView`. The effect you should verify is that the test target builds and the simulated frame source, video-file frame source, and Metal texture bridge tests pass.
 
 #### Option A: Xcode
 
@@ -236,6 +259,7 @@ You should see these suites:
 - `MockCameraTransportTests`
 - `CPUReferenceTests`
 - `FrameSourceStage2Tests`
+- `MetalTextureBridgeTests`
 
 #### Option B: Terminal
 
@@ -283,7 +307,7 @@ Expected result:
 ** TEST EXECUTE SUCCEEDED **
 ```
 
-The current Stage 2 suite contains 31 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
+The current Stage 3 suite contains 32 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
 
 ### Local Real Materials
 
@@ -295,7 +319,7 @@ Current filename convention:
 - `material/NLOG.MOV`
 - `material/HLG.MOV`
 
-Automated tests do not depend on those real materials. Stage 2 tests generate small temporary `.mov` fixtures to verify `AVAssetReader`. Later Stage 5/7 color conversion and real-material manual validation should use the files in `material/`.
+Automated tests do not depend on those real materials. Tests generate small temporary `.mov` fixtures to verify `AVAssetReader` and use simulated BGRA pixel buffers to verify Metal bridging. Later Stage 5/7 color conversion and real-material manual validation should use the files in `material/`.
 
 ### Monitor Screen
 
@@ -310,6 +334,8 @@ Use the floating tool buttons to toggle monitor assists:
 
 The scope panel is intentionally compact in `v0.1.3`: waveform and RGB Parade use about 40% of the screen width so they do not dominate the monitored image. When the camera parameter adjustment panel is open, the scope panel moves upward to avoid overlapping the bottom controls.
 
+Starting in Stage 3, the main preview is drawn by `MTKView`: `VideoFrame.pixelBuffer` is bridged through `CVMetalTextureCache` into `MTLTexture`, then sampled unchanged by `PreviewShaders.metal` into the drawable. LUT, false color, zebra, and scope are still future passes and do not modify the Stage 3 Metal output pixels yet.
+
 ### LUT Import
 
 1. Tap the LUT tool button.
@@ -319,7 +345,7 @@ The scope panel is intentionally compact in `v0.1.3`: waveform and RGB Parade us
 5. Select the imported LUT from the list.
 6. Enable LUT and adjust intensity.
 
-Current LUT behavior is intentionally lightweight: imported LUTs are parsed and validated, but the preview uses a descriptor tint as a visual placeholder. Full 3D LUT sampling should be implemented in the rendering pipeline next.
+Current LUT imports are parsed and validated, but they are not yet connected to Metal 3D texture sampling. Full LUT pass support and intensity blending should be implemented in the rendering pipeline next.
 
 ### Mock Camera Controls
 
@@ -364,6 +390,8 @@ Important implementation decisions are documented with inline comments in the Sw
 - Why `VideoFrame` uses `CVPixelBuffer` as the media boundary.
 - Why the simulated frame source generates BGRA pixel buffers instead of keeping only animation phase.
 - Why the video-file frame source uses `AVAssetReader` instead of leaking `AVPlayer` into the frame-source or UI layers.
+- Why `CVPixelBuffer -> MTLTexture` bridging is centralized at the Metal renderer boundary instead of spread through UI or frame-source code.
+- Why the main preview uses `MTKView` while SwiftUI continues to own toolbars, sheets, and bottom controls.
 - Why UI submission state does not leak into the transport boundary.
 - Why exposure mode lives in `CameraState`, not local UI state.
 - Why parameter availability has both `isWritable` and exposure-mode rules.
@@ -389,48 +417,44 @@ plutil -lint PrismBlade.xcodeproj/project.pbxproj PrismBlade/Info.plist
 And built and tested with:
 
 ```sh
+/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild build ...
 /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild build-for-testing ...
 /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building ...
 ```
 
-The simulator test build and test execution succeeded on an iPhone 17 Simulator. In restricted shells, Xcode may print CoreSimulator logging permission warnings; run from Terminal or Xcode directly if the sandbox cannot talk to CoreSimulator or `testmanagerd`.
+The app build, simulator test build, and test execution succeeded on an iPhone 17 Simulator. The normal `.metal` compilation path depends on the installed Metal Toolchain. In restricted shells, Xcode may not see the cryptex-mounted Metal Toolchain or may print CoreSimulator logging permission warnings; run from Terminal or Xcode directly if the sandbox cannot access the Metal Toolchain, CoreSimulator, or `testmanagerd`.
 
 ## Next Steps
 
 Recommended next development steps:
 
-1. Add a real Metal preview loop from `v0.2.1` Stage 3.
-   - Introduce a `FrameProcessor`.
-   - Bridge `VideoFrame.pixelBuffer` into Metal textures through `CVMetalTextureCache`.
-   - Add `MTKView`-backed preview rendering.
-
-2. Apply LUTs to pixels.
+1. Start `v0.2.1` Stage 4 by applying LUTs to real pixels.
    - Convert parsed `.cube` data into a 3D texture or Core Image color cube.
    - Apply LUT intensity by blending original and LUT-processed output.
    - Keep the LUT operation display-only, not destructive.
 
-3. Replace placeholder exposure overlays.
+2. Replace placeholder exposure overlays.
    - Implement false color from luma values.
    - Implement zebra from threshold/range masks.
    - Keep these as display overlays or passes.
 
-4. Implement real scope analysis.
+3. Implement real scope analysis.
    - Sample frames at a reduced resolution.
    - Generate Luma waveform from pixel values.
    - Generate RGB Parade from channel values.
    - Add frame skipping to protect simulator and iPhone 12 Pro performance.
 
-5. Continue expanding tests with each rendering slice.
+4. Continue expanding tests with each rendering slice.
    - Add offscreen Metal tests.
    - Compare Metal output against `CPUReference`.
    - Add video frame source and scope compute tests.
 
-6. Prepare real camera research adapters.
+5. Prepare real camera research adapters.
    - Keep `CameraTransport` stable.
    - Add empty adapter namespaces for ImageCaptureCore, PTP, and network bridge work.
    - Do not expose Nikon, USB, PTP, or `libgphoto2` types to SwiftUI.
 
-7. Perform hardware research later.
+6. Perform hardware research later.
    - Validate Nikon Z6III USB modes with iPhone 12 Pro.
    - Compare ImageCaptureCore capability coverage.
    - Decide whether USB/PTP, Nikon iPhone mode, Wi-Fi, USB-LAN, or a bridge service is the right production path.
