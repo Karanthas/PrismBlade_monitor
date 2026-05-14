@@ -16,6 +16,9 @@ Build/
 *.dSYM.zip
 *.dSYM
 
+# Local real camera/video materials
+material/
+
 # Swift Package Manager
 .build/
 .swiftpm/

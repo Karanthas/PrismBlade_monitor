@@ -474,6 +474,18 @@ Scope bins 从 GPU 回读到 CPU 会引入同步风险，因此必须满足：
 - 解码输出应优先选择能高效桥接 Metal 的 pixel format。
 - 帧推送节奏由 `VideoFileFrameSource` 根据 sample timing 控制，不依赖 `AVPlayer`。
 
+### 本地测试素材位置
+
+真实视频测试素材统一放在仓库根目录的 `material/` 下。该目录只用于本地开发和手动验证，已经加入 `.gitignore`，不随代码提交。
+
+当前本地素材约定：
+
+- `material/REC709.MOV`：Rec.709 测试视频。
+- `material/NLOG.MOV`：Nikon Z6III N-Log 测试视频。
+- `material/HLG.MOV`：HLG 测试视频。
+
+自动化测试不应默认依赖这些未提交素材；阶段 2 的基础 XCTest 可继续使用程序生成的小型视频 fixture 或在素材存在时执行条件验证。阶段 5/7 的颜色转换和真实素材手动验证应优先使用 `material/` 中的三类素材。
+
 ### UI
 
 v0.2.1 可以先不做完整媒体库管理。可选入口：
