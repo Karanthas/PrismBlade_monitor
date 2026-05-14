@@ -24,7 +24,26 @@
 		AA0000000000000000000115 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000215 /* SettingsScreen.swift */; };
 		AA0000000000000000000116 /* LUTManagerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000216 /* LUTManagerScreen.swift */; };
 		AA0000000000000000000117 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000217 /* Assets.xcassets */; };
+		AA0000000000000000000120 /* PixelBufferFixtureFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000220 /* PixelBufferFixtureFactory.swift */; };
+		AA0000000000000000000121 /* CubeFixtureFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000221 /* CubeFixtureFactory.swift */; };
+		AA0000000000000000000122 /* CPUReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000222 /* CPUReference.swift */; };
+		AA0000000000000000000123 /* PixelBufferFixtureFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000223 /* PixelBufferFixtureFactoryTests.swift */; };
+		AA0000000000000000000124 /* LUTParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000224 /* LUTParserTests.swift */; };
+		AA0000000000000000000125 /* CameraExposureRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000225 /* CameraExposureRulesTests.swift */; };
+		AA0000000000000000000126 /* CameraCommandServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000226 /* CameraCommandServiceTests.swift */; };
+		AA0000000000000000000127 /* MockCameraTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000227 /* MockCameraTransportTests.swift */; };
+		AA0000000000000000000128 /* CPUReferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000228 /* CPUReferenceTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AA0000000000000000000A01 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000701 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000501;
+			remoteInfo = PrismBlade;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		AA0000000000000000000201 /* PrismBladeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrismBladeApp.swift; sourceTree = "<group>"; };
@@ -46,10 +65,27 @@
 		AA0000000000000000000217 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA0000000000000000000218 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA0000000000000000000219 /* PrismBlade.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PrismBlade.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000220 /* PixelBufferFixtureFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelBufferFixtureFactory.swift; sourceTree = "<group>"; };
+		AA0000000000000000000221 /* CubeFixtureFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CubeFixtureFactory.swift; sourceTree = "<group>"; };
+		AA0000000000000000000222 /* CPUReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CPUReference.swift; sourceTree = "<group>"; };
+		AA0000000000000000000223 /* PixelBufferFixtureFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelBufferFixtureFactoryTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000224 /* LUTParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTParserTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000225 /* CameraExposureRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraExposureRulesTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000226 /* CameraCommandServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraCommandServiceTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000227 /* MockCameraTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockCameraTransportTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000228 /* CPUReferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CPUReferenceTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000229 /* PrismBladeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PrismBladeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		AA0000000000000000000301 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000302 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -63,6 +99,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000403 /* PrismBlade */,
+				AA0000000000000000000413 /* PrismBladeTests */,
 				AA0000000000000000000402 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -71,6 +108,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000219 /* PrismBlade.app */,
+				AA0000000000000000000229 /* PrismBladeTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -172,6 +210,38 @@
 			path = LUT;
 			sourceTree = "<group>";
 		};
+		AA0000000000000000000413 /* PrismBladeTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000414 /* Fixtures */,
+				AA0000000000000000000415 /* References */,
+				AA0000000000000000000223 /* PixelBufferFixtureFactoryTests.swift */,
+				AA0000000000000000000224 /* LUTParserTests.swift */,
+				AA0000000000000000000225 /* CameraExposureRulesTests.swift */,
+				AA0000000000000000000226 /* CameraCommandServiceTests.swift */,
+				AA0000000000000000000227 /* MockCameraTransportTests.swift */,
+				AA0000000000000000000228 /* CPUReferenceTests.swift */,
+			);
+			path = PrismBladeTests;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000414 /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000220 /* PixelBufferFixtureFactory.swift */,
+				AA0000000000000000000221 /* CubeFixtureFactory.swift */,
+			);
+			path = Fixtures;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000415 /* References */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000222 /* CPUReference.swift */,
+			);
+			path = References;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -192,6 +262,24 @@
 			productReference = AA0000000000000000000219 /* PrismBlade.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AA0000000000000000000502 /* PrismBladeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000903 /* Build configuration list for PBXNativeTarget "PrismBladeTests" */;
+			buildPhases = (
+				AA0000000000000000000603 /* Sources */,
+				AA0000000000000000000302 /* Frameworks */,
+				AA0000000000000000000604 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0000000000000000000B01 /* PBXTargetDependency */,
+			);
+			name = PrismBladeTests;
+			productName = PrismBladeTests;
+			productReference = AA0000000000000000000229 /* PrismBladeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -204,6 +292,10 @@
 				TargetAttributes = {
 					AA0000000000000000000501 = {
 						CreatedOnToolsVersion = 15.3;
+					};
+					AA0000000000000000000502 = {
+						CreatedOnToolsVersion = 15.3;
+						TestTargetID = AA0000000000000000000501;
 					};
 				};
 			};
@@ -221,6 +313,7 @@
 			projectRoot = "";
 			targets = (
 				AA0000000000000000000501 /* PrismBlade */,
+				AA0000000000000000000502 /* PrismBladeTests */,
 			);
 		};
 /* End PBXProject section */
@@ -231,6 +324,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000117 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000604 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -260,7 +360,31 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000000000000000000603 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000120 /* PixelBufferFixtureFactory.swift in Sources */,
+				AA0000000000000000000121 /* CubeFixtureFactory.swift in Sources */,
+				AA0000000000000000000122 /* CPUReference.swift in Sources */,
+				AA0000000000000000000123 /* PixelBufferFixtureFactoryTests.swift in Sources */,
+				AA0000000000000000000124 /* LUTParserTests.swift in Sources */,
+				AA0000000000000000000125 /* CameraExposureRulesTests.swift in Sources */,
+				AA0000000000000000000126 /* CameraCommandServiceTests.swift in Sources */,
+				AA0000000000000000000127 /* MockCameraTransportTests.swift in Sources */,
+				AA0000000000000000000128 /* CPUReferenceTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AA0000000000000000000B01 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000501 /* PrismBlade */;
+			targetProxy = AA0000000000000000000A01 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AA0000000000000000000801 /* Debug */ = {
@@ -416,6 +540,58 @@
 			};
 			name = Release;
 		};
+		AA0000000000000000000805 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chronus.PrismBladeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PrismBlade.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PrismBlade";
+			};
+			name = Debug;
+		};
+		AA0000000000000000000806 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chronus.PrismBladeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PrismBlade.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PrismBlade";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -433,6 +609,15 @@
 			buildConfigurations = (
 				AA0000000000000000000803 /* Debug */,
 				AA0000000000000000000804 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000903 /* Build configuration list for PBXNativeTarget "PrismBladeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000805 /* Debug */,
+				AA0000000000000000000806 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

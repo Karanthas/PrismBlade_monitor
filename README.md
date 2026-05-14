@@ -1,12 +1,12 @@
 # PrismBlade
 
-**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current version, `v0.1.3`, focuses on the simulator monitoring experience, image-assist tools, LUT import flow, bottom camera controls, exposure-mode-aware parameter rules, a mock camera transport boundary, and the monitor interaction fixes from the v0.1.3 technical spec.
+**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch is moving through the `v0.2.1` Metal-first plan. Stage 1 is complete: the project now has an XCTest target, generated image/LUT fixtures, CPU reference helpers, and automated protection for the existing LUT parser and mock camera domain rules.
 
 > Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
 ## Status
 
-This repository currently contains a simulator-ready SwiftUI prototype. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
+This repository currently contains a simulator-ready SwiftUI prototype plus the first `v0.2.1` testing foundation. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
 
 The app is intentionally built around replaceable boundaries:
 
@@ -14,7 +14,8 @@ The app is intentionally built around replaceable boundaries:
 - `CameraTransport` owns camera communication and can later be replaced by ImageCaptureCore, PTP, or a network bridge.
 - `CameraCommandService` validates camera writes before they reach the transport layer.
 - LUT parsing and repository logic are separate from the monitor UI.
-- SwiftUI owns layout and state presentation; the current rendered image is still a synthetic preview, not the final Metal/Core Image pipeline.
+- SwiftUI owns layout and state presentation; the current rendered image is still a synthetic preview, not the final Metal pipeline.
+- `PrismBladeTests` owns repeatable fixtures and CPU references so later Metal passes can be compared against deterministic expected values.
 
 ## Current Features
 
@@ -53,6 +54,11 @@ The app is intentionally built around replaceable boundaries:
   - Record toggle
   - Capture action
   - Focus action
+- XCTest target for `v0.2.1` Stage 1:
+  - Pixel buffer fixture generation for small BGRA test images.
+  - `.cube` fixture generation for valid and invalid LUT cases.
+  - CPU reference helpers for luma, LUT sampling, zebra masks, and waveform bins.
+  - Unit tests for `LUTParser`, `CameraExposureRules`, `CameraCommandService`, and `MockCameraTransport`.
 
 ## What Is Not Implemented Yet
 
@@ -67,6 +73,8 @@ The app is intentionally built around replaceable boundaries:
 - Scope analysis from actual pixel buffers.
 - Real camera exposure-mode reading.
 - Real Nikon capability table parsing.
+- Metal offscreen render tests.
+- Real pixel-driven scope compute tests.
 - Histogram.
 - Focus peaking.
 - Real recording or photo capture.
@@ -80,7 +88,7 @@ The app is intentionally built around replaceable boundaries:
 The project has been verified with:
 
 - Xcode `26.4.1`
-- iOS Simulator generic build destination
+- iPhone 17 Simulator, iOS `26.4.1`
 - Swift `5`
 - iOS deployment target `17.0`
 
@@ -115,6 +123,13 @@ PrismBlade/
       LUTManagerScreen.swift
   Resources/
     LUTs/
+PrismBladeTests/
+  Fixtures/
+    CubeFixtureFactory.swift
+    PixelBufferFixtureFactory.swift
+  References/
+    CPUReference.swift
+  *Tests.swift
 ```
 
 ## Architecture Overview
@@ -145,6 +160,12 @@ Camera
   -> CameraCommandService
   -> CameraTransport
   -> MockCameraTransport
+
+Tests
+  -> PixelBufferFixtureFactory
+  -> CubeFixtureFactory
+  -> CPUReference
+  -> XCTest coverage for LUT and camera domain rules
 ```
 
 `MonitorSession` is the main state container. It coordinates frame input, mock camera commands, settings persistence, LUT import state, exposure-mode availability, and UI-facing monitor state.
@@ -181,6 +202,75 @@ Expected result:
 ```text
 ** BUILD SUCCEEDED **
 ```
+
+### Run Stage 1 Tests
+
+Stage 1 does not add a visible app feature. The effect you should verify is that the new test target builds and the automated tests pass.
+
+#### Option A: Xcode
+
+1. Open `PrismBlade.xcodeproj`.
+2. Select the `PrismBlade` scheme.
+3. Select an iPhone Simulator.
+4. Press `Command-U`, or choose `Product > Test`.
+5. Open the Test navigator and confirm the `PrismBladeTests` suites are green.
+
+You should see these suites:
+
+- `PixelBufferFixtureFactoryTests`
+- `LUTParserTests`
+- `CameraExposureRulesTests`
+- `CameraCommandServiceTests`
+- `MockCameraTransportTests`
+- `CPUReferenceTests`
+
+#### Option B: Terminal
+
+If `xcode-select -p` points to `/Library/Developer/CommandLineTools`, use the full Xcode binary path or set `DEVELOPER_DIR`. First list available simulator destinations:
+
+```sh
+/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild \
+  -showdestinations \
+  -project PrismBlade.xcodeproj \
+  -scheme PrismBlade \
+  -derivedDataPath /private/tmp/PrismBladeDerivedData
+```
+
+Pick an iPhone Simulator id from the output, then build the test products:
+
+```sh
+/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild \
+  build-for-testing \
+  -project PrismBlade.xcodeproj \
+  -scheme PrismBlade \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath /private/tmp/PrismBladeDerivedData
+```
+
+Expected result:
+
+```text
+** TEST BUILD SUCCEEDED **
+```
+
+Run the tests, replacing `<SIMULATOR_ID>` with the id from `-showdestinations`:
+
+```sh
+/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild \
+  test-without-building \
+  -project PrismBlade.xcodeproj \
+  -scheme PrismBlade \
+  -destination 'id=<SIMULATOR_ID>' \
+  -derivedDataPath /private/tmp/PrismBladeDerivedData
+```
+
+Expected result:
+
+```text
+** TEST EXECUTE SUCCEEDED **
+```
+
+The current Stage 1 suite contains 27 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
 
 ### Monitor Screen
 
@@ -268,56 +358,60 @@ The current code has been checked with:
 plutil -lint PrismBlade.xcodeproj/project.pbxproj PrismBlade/Info.plist
 ```
 
-And built with:
+And built and tested with:
 
 ```sh
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild ...
+/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild build-for-testing ...
+/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building ...
 ```
 
-The simulator build succeeded. In the current sandbox, Xcode may print CoreSimulator logging permission warnings, but those warnings did not prevent compilation, linking, or app bundle generation.
+The simulator test build and test execution succeeded on an iPhone 17 Simulator. In restricted shells, Xcode may print CoreSimulator logging permission warnings; run from Terminal or Xcode directly if the sandbox cannot talk to CoreSimulator or `testmanagerd`.
 
 ## Next Steps
 
 Recommended next development steps:
 
-1. Add a real rendering pipeline.
+1. Add the media frame model and frame source updates from `v0.2.1` Stage 2.
+   - Move `VideoFrame` toward real `CVPixelBuffer` payloads.
+   - Keep `phase` only as transitional simulator state if needed during the migration.
+   - Preserve the generated pixel-buffer fixtures as the test input source.
+
+2. Add a real Metal preview loop from `v0.2.1` Stage 3.
    - Introduce a `FrameProcessor`.
    - Move the synthetic image logic behind a renderer-facing abstraction.
-   - Add Core Image or Metal-backed preview rendering.
+   - Add `MTKView`-backed preview rendering.
 
-2. Apply LUTs to pixels.
+3. Apply LUTs to pixels.
    - Convert parsed `.cube` data into a 3D texture or Core Image color cube.
    - Apply LUT intensity by blending original and LUT-processed output.
    - Keep the LUT operation display-only, not destructive.
 
-3. Replace placeholder exposure overlays.
+4. Replace placeholder exposure overlays.
    - Implement false color from luma values.
    - Implement zebra from threshold/range masks.
    - Keep these as display overlays or passes.
 
-4. Implement real scope analysis.
+5. Implement real scope analysis.
    - Sample frames at a reduced resolution.
    - Generate Luma waveform from pixel values.
    - Generate RGB Parade from channel values.
    - Add frame skipping to protect simulator and iPhone 12 Pro performance.
 
-5. Add `VideoFileFrameSource`.
+6. Add `VideoFileFrameSource`.
    - Use AVFoundation to read bundled or user-selected video.
    - Keep `SimulatedFrameSource` as the default fallback.
 
-6. Add tests.
-   - Unit tests for `.cube` parsing.
-   - Unit tests for mock transport value validation.
-   - Unit tests for exposure-mode parameter locking.
-   - Unit tests for monitor state toggles.
-   - UI smoke tests for monitor screen, settings, LUT import error state, and bottom camera control bar.
+7. Continue expanding tests with each rendering slice.
+   - Add offscreen Metal tests.
+   - Compare Metal output against `CPUReference`.
+   - Add video frame source and scope compute tests.
 
-7. Prepare real camera research adapters.
+8. Prepare real camera research adapters.
    - Keep `CameraTransport` stable.
    - Add empty adapter namespaces for ImageCaptureCore, PTP, and network bridge work.
    - Do not expose Nikon, USB, PTP, or `libgphoto2` types to SwiftUI.
 
-8. Perform hardware research later.
+9. Perform hardware research later.
    - Validate Nikon Z6III USB modes with iPhone 12 Pro.
    - Compare ImageCaptureCore capability coverage.
    - Decide whether USB/PTP, Nikon iPhone mode, Wi-Fi, USB-LAN, or a bridge service is the right production path.
@@ -325,6 +419,8 @@ Recommended next development steps:
 ## Reference Documents
 
 - [Prototype Design](PROTOTYPE_DESIGN.md)
+- [Technical Spec v0.2.1](TECHNICAL_SPEC_v0.2.1.md)
+- [Test Plan v0.2.1](TEST_PLAN_v0.2.1.md)
 - [Technical Spec v0.1.3](TECHNICAL_SPEC_v0.1.3.md)
 - [Technical Spec v0.1.2](TECHNICAL_SPEC_v0.1.2.md)
 - [Technical Spec v0.1.1](TECHNICAL_SPEC_v0.1.1.md)
