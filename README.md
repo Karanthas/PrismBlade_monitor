@@ -1,12 +1,12 @@
 # PrismBlade
 
-**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch is moving through the `v0.2.1` Metal-first plan. Stage 3 is complete, and the first Stage 4 LUT slice is now in place: the project has a real `CVPixelBuffer` media frame model, a BGRA simulated frame source, an `AVAssetReader` video-file frame source, a `CVPixelBuffer -> MTLTexture -> MTKView drawable` Metal preview loop, and display-only 3D LUT sampling in the Metal preview shader.
+**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch is moving through the `v0.2.1` Metal-first plan. Stages 3-5 now have a working vertical slice: the project has a real `CVPixelBuffer` media frame model, a BGRA simulated frame source, an `AVAssetReader` video-file frame source, a `CVPixelBuffer -> MTLTexture -> MTKView drawable` Metal preview loop, display-only 3D LUT sampling, centralized Rec.709 / N-Log / HLG display-space conversion, and shader-based false color / zebra exposure assists.
 
 > Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
 ## Status
 
-This repository currently contains a simulator-ready SwiftUI prototype plus the `v0.2.1` Stage 3 Metal preview loop and the first Stage 4 LUT rendering path. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
+This repository currently contains a simulator-ready SwiftUI prototype plus the `v0.2.1` Stage 3 Metal preview loop, Stage 4 LUT rendering path, and the first Stage 5 color-conversion / exposure-assist slice. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
 
 The app is intentionally built around replaceable boundaries:
 
@@ -18,6 +18,7 @@ The app is intentionally built around replaceable boundaries:
 - `MetalPreviewSurface` wraps `MTKView` with `UIViewRepresentable` and reconnects the Metal surface to the SwiftUI monitor screen.
 - `LUTStore` and `LUTRepository` load imported LUTs and optional local `.cube` resources without requiring redistributable vendor LUTs in the repository.
 - `LUTPass` uploads parsed `.cube` data into a 3D Metal texture and caches texture resources per LUT descriptor.
+- `ColorTransformPass`, `FalseColorPass`, and `ZebraPass` provide the Swift-side state mapping for the Stage 5 shader uniforms.
 - `CameraTransport` owns camera communication and can later be replaced by ImageCaptureCore, PTP, or a network bridge.
 - `CameraCommandService` validates camera writes before they reach the transport layer.
 - LUT parsing and repository logic are separate from the monitor UI.
@@ -33,15 +34,18 @@ The app is intentionally built around replaceable boundaries:
 - Initial color-encoding detection through explicit hints, `REC709` / `NLOG` / `HLG` filename conventions, and video metadata markers.
 - Metal texture bridging from BGRA `CVPixelBuffer` to `.bgra8Unorm` `MTLTexture`.
 - Metal main preview rendering with `MTLDevice`, `MTLCommandQueue`, a minimal render pipeline, and `PreviewShaders.metal`.
-- Display-only 3D LUT application in the Metal preview shader, with original/LUT output mixed by LUT intensity.
+- Display-space conversion in the Metal preview shader for Rec.709, N-Log, and HLG inputs.
+- Display-only 3D LUT application in the Metal preview shader, with working-space/LUT output mixed by LUT intensity.
+- Shader-based false color using converted display-space luma.
+- Shader-based high zebra and range zebra masks using converted display-space luma and the settings threshold.
 - `LUTPass` conversion from parsed `.cube` entries to `.rgba32Float` 3D `MTLTexture` resources.
 - Identity fallback LUT resource so the renderer can keep drawing when no LUT is enabled or a selected LUT cannot be resolved.
 - SwiftUI / Metal integration through an `MTKView` wrapped in `UIViewRepresentable`, replacing the SwiftUI gradient placeholder as the main preview.
 - Minimal Metal viewport scaling for fit, fill, 1x, and 2x.
 - Top status bar for connection state, input format, frame rate, LUT state, exposure tools, battery, and storage placeholders.
 - Left and right floating tool rails.
-- False color toggle.
-- Zebra toggle with threshold settings.
+- False color toggle wired to the Metal preview shader.
+- Zebra toggle with threshold settings wired to the Metal preview shader.
 - Compact Luma waveform overlay at 40% of the monitor width.
 - Compact RGB Parade overlay at 40% of the monitor width.
 - Zoom mode cycling: fit, fill, 1x, 2x.
@@ -72,7 +76,7 @@ The app is intentionally built around replaceable boundaries:
   - Record toggle
   - Capture action
   - Focus action
-- XCTest target for `v0.2.1` Stages 1-4:
+- XCTest target for `v0.2.1` Stages 1-5:
   - Pixel buffer fixture generation for small BGRA test images.
   - `.cube` fixture generation for valid and invalid LUT cases.
   - CPU reference helpers for luma, LUT sampling, zebra masks, and waveform bins.
@@ -83,7 +87,8 @@ The app is intentionally built around replaceable boundaries:
   - `MetalTextureBridge` test coverage for BGRA pixel-buffer to Metal texture bridging.
   - `LUTRepository` tests for optional local LUT discovery and imported LUT reload.
   - `LUTPass` tests for 3D texture upload order, domain preservation, and texture format.
-  - `MetalLUTShaderTests` offscreen-render coverage for LUT intensity blending.
+  - `ColorTransformPass` reference tests for generated Rec.709 / N-Log / HLG inputs.
+  - `MetalLUTShaderTests` offscreen-render coverage for LUT intensity blending, N-Log display conversion, generated gray-ramp false color, and zebra threshold behavior.
 
 ## What Is Not Implemented Yet
 
@@ -94,12 +99,11 @@ The app is intentionally built around replaceable boundaries:
 - User-visible real video-file playback entry point.
 - MetalFrameProcessor pass orchestration.
 - Color-space-aware automatic LUT suggestions.
-- Real per-pixel false color and zebra processing.
 - Scope analysis from actual pixel buffers.
 - Real camera exposure-mode reading.
 - Real Nikon capability table parsing.
-- Metal offscreen render tests.
 - Real pixel-driven scope compute tests.
+- Deep color calibration against real Nikon gray-card, color-chart, skin-tone, and waveform reference materials.
 - Histogram.
 - Focus peaking.
 - Real recording or photo capture.
@@ -144,6 +148,9 @@ PrismBlade/
     MetalTextureBridge.swift
     MetalPreviewRenderer.swift
     MetalPreviewSurface.swift
+    ColorTransformPass.swift
+    FalseColorPass.swift
+    ZebraPass.swift
     PreviewShaders.metal
   Imaging/
     LUTParser.swift
@@ -199,6 +206,9 @@ Metal Preview
   -> MetalTextureBridge
   -> MetalPreviewRenderer
   -> MetalPreviewSurface
+  -> ColorTransformPass
+  -> FalseColorPass
+  -> ZebraPass
   -> PreviewShaders.metal
 
 Imaging
@@ -254,9 +264,9 @@ Expected result:
 ** BUILD SUCCEEDED **
 ```
 
-### Run Stage 3-4 Tests
+### Run Stage 3-5 Tests
 
-Stage 3 moves the main preview from SwiftUI synthetic drawing to an `MTKView`. The first Stage 4 slice adds real LUT texture upload and fragment-shader LUT sampling. The effect you should verify is that the test target builds and the simulated frame source, video-file frame source, Metal texture bridge, LUT repository, LUT pass, and Metal LUT shader tests pass.
+Stage 3 moves the main preview from SwiftUI synthetic drawing to an `MTKView`. Stage 4 adds real LUT texture upload and fragment-shader LUT sampling. The first Stage 5 slice adds centralized Rec.709 / N-Log / HLG display conversion plus shader-based false color and zebra. The effect you should verify is that the test target builds and the simulated frame source, video-file frame source, Metal texture bridge, LUT repository, LUT pass, color transform, and Metal shader tests pass.
 
 #### Option A: Xcode
 
@@ -326,7 +336,7 @@ Expected result:
 ** TEST EXECUTE SUCCEEDED **
 ```
 
-The current Stage 3-4 suite contains 39 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
+The current Stage 3-5 suite contains 43 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
 
 ### Local Real Materials
 
@@ -338,7 +348,9 @@ Current filename convention:
 - `material/NLOG.MOV`
 - `material/HLG.MOV`
 
-Automated tests do not depend on those real materials. Tests generate small temporary `.mov` fixtures to verify `AVAssetReader` and use simulated BGRA pixel buffers to verify Metal bridging. Later Stage 5/7 color conversion and real-material manual validation should use the files in `material/`.
+Automated tests do not depend on those real materials. Tests generate small temporary `.mov` fixtures to verify `AVAssetReader`, use simulated BGRA pixel buffers to verify Metal bridging, and use generated gray / clipping / float-texture inputs for the first Stage 5 color-conversion, false-color, and zebra checks.
+
+Real gray-card, color-chart, skin-tone, overexposure, underexposure, dark-noise, and reference waveform / RGB Parade materials are still needed for deeper Stage 5 and Stage 7 calibration. Keep those assets in `material/`; the directory is ignored and should remain local.
 
 ### Local LUT Materials
 
@@ -366,7 +378,18 @@ Use the floating tool buttons to toggle monitor assists:
 
 The scope panel is intentionally compact in `v0.1.3`: waveform and RGB Parade use about 40% of the screen width so they do not dominate the monitored image. When the camera parameter adjustment panel is open, the scope panel moves upward to avoid overlapping the bottom controls.
 
-Starting in Stage 3, the main preview is drawn by `MTKView`: `VideoFrame.pixelBuffer` is bridged through `CVMetalTextureCache` into `MTLTexture`, then sampled by `PreviewShaders.metal` into the drawable. The current Stage 4 LUT slice can also bind a 3D LUT texture and mix LUT output by intensity in the fragment shader. False color, zebra, and scope are still future pixel-processing passes and do not modify the Metal output pixels yet.
+Starting in Stage 3, the main preview is drawn by `MTKView`: `VideoFrame.pixelBuffer` is bridged through `CVMetalTextureCache` into `MTLTexture`, then sampled by `PreviewShaders.metal` into the drawable. Stage 4 binds a 3D LUT texture and mixes LUT output by intensity in the fragment shader. Stage 5 now sends the input color encoding and exposure-assist state into the shader, so the preview path is:
+
+```text
+source texture
+  -> Rec.709 / N-Log / HLG display conversion
+  -> LUT, if enabled
+  -> false color, if enabled
+  -> zebra, if enabled
+  -> MTKView drawable
+```
+
+The scope overlay is still a SwiftUI placeholder driven by existing panel logic; real Metal compute scope remains future work.
 
 ### LUT Import
 
@@ -435,6 +458,8 @@ Important implementation decisions are documented with inline comments in the Sw
 - Why LUT preview tint remains metadata while real LUT rendering uses parsed `.cube` entries.
 - Why optional local vendor LUT files are discovered at runtime rather than hard-coded as always-visible built-ins.
 - Why `LUTPass` uses a fallback identity resource when LUT rendering is disabled or unavailable.
+- Why color conversion is centralized before LUT, false color, zebra, and future scope analysis.
+- Why generated gray / clipping inputs are enough for Stage 5 automation but do not replace real Nikon calibration materials.
 - Why the scope overlay is constrained to 40% width.
 - Why the scope overlay uses dynamic bottom avoidance when the parameter adjustment panel is open.
 
@@ -456,21 +481,22 @@ And built and tested with:
 /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building ...
 ```
 
-The app build, simulator test build, and test execution succeeded on an iPhone 17 Simulator. The normal `.metal` compilation path depends on the installed Metal Toolchain. In restricted shells, Xcode may not see the cryptex-mounted Metal Toolchain or may print CoreSimulator logging permission warnings; run from Terminal or Xcode directly if the sandbox cannot access the Metal Toolchain, CoreSimulator, or `testmanagerd`.
+The app build, simulator test build, and test execution succeeded on an iPhone 17 Pro Simulator. The normal `.metal` compilation path depends on the installed Metal Toolchain. In restricted shells, Xcode may not see the cryptex-mounted Metal Toolchain or may print CoreSimulator logging permission warnings; run from Terminal or Xcode directly if the sandbox cannot access the Metal Toolchain, CoreSimulator, or `testmanagerd`.
 
 ## Next Steps
 
 Recommended next development steps:
 
-1. Harden the `v0.2.1` Stage 4 LUT path.
+1. Harden the `v0.2.1` Stage 4-5 display path.
    - Add more real-material validation with optional local Nikon / N-Log LUTs.
    - Keep local vendor LUT assets out of the repository unless redistribution is confirmed.
-   - Decide whether LUT suggestions should be gated by `FrameFormat.colorEncoding` in Stage 5.
+   - Decide whether LUT suggestions should be gated by `FrameFormat.colorEncoding`.
+   - Calibrate N-Log / HLG, false color, and zebra behavior after real gray-card, color-chart, skin-tone, and reference waveform materials arrive.
 
-2. Replace placeholder exposure overlays.
-   - Implement false color from luma values.
-   - Implement zebra from threshold/range masks.
-   - Keep these as display overlays or passes.
+2. Split the current preview shader into clearer pass boundaries when the pipeline grows.
+   - Promote the current shader logic into `MetalFrameProcessor` orchestration.
+   - Keep color conversion as the single input interpretation point.
+   - Keep false color and zebra display-only.
 
 3. Implement real scope analysis.
    - Sample frames at a reduced resolution.

@@ -67,13 +67,110 @@ final class MetalLUTShaderTests: XCTestCase {
         XCTAssertEqual(fullMix.z, 0, accuracy: 0.02)
     }
 
+    func testPreviewShaderTransformsNLogBeforeDisplay() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw XCTSkip("Metal is not available in this test environment")
+        }
+
+        guard let commandQueue = device.makeCommandQueue(),
+              let pipelineState = try makePipelineState(device: device) else {
+            throw XCTSkip("Unable to create Metal pipeline")
+        }
+
+        let lutResource = try LUTPass(device: device).fallbackResource()
+        let output = try render(
+            device: device,
+            commandQueue: commandQueue,
+            pipelineState: pipelineState,
+            sourceColor: SIMD3<Float>(repeating: 0.36366777),
+            lutResource: lutResource,
+            intensity: 0,
+            colorEncoding: .nLog
+        )
+
+        XCTAssertEqual(output.x, 0.18, accuracy: 0.02)
+        XCTAssertEqual(output.y, 0.18, accuracy: 0.02)
+        XCTAssertEqual(output.z, 0.18, accuracy: 0.02)
+    }
+
+    func testPreviewShaderMapsGeneratedGrayRampToFalseColorBand() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw XCTSkip("Metal is not available in this test environment")
+        }
+
+        guard let commandQueue = device.makeCommandQueue(),
+              let pipelineState = try makePipelineState(device: device) else {
+            throw XCTSkip("Unable to create Metal pipeline")
+        }
+
+        let lutResource = try LUTPass(device: device).fallbackResource()
+        let output = try render(
+            device: device,
+            commandQueue: commandQueue,
+            pipelineState: pipelineState,
+            sourceColor: SIMD3<Float>(repeating: 0.5),
+            lutResource: lutResource,
+            intensity: 0,
+            falseColorEnabled: true
+        )
+
+        XCTAssertEqual(output.x, 0.10, accuracy: 0.03)
+        XCTAssertEqual(output.y, 0.86, accuracy: 0.03)
+        XCTAssertEqual(output.z, 0.26, accuracy: 0.03)
+    }
+
+    func testPreviewShaderAppliesZebraOnlyAboveThreshold() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw XCTSkip("Metal is not available in this test environment")
+        }
+
+        guard let commandQueue = device.makeCommandQueue(),
+              let pipelineState = try makePipelineState(device: device) else {
+            throw XCTSkip("Unable to create Metal pipeline")
+        }
+
+        let lutResource = try LUTPass(device: device).fallbackResource()
+        let belowThreshold = try render(
+            device: device,
+            commandQueue: commandQueue,
+            pipelineState: pipelineState,
+            sourceColor: SIMD3<Float>(repeating: 0.6),
+            lutResource: lutResource,
+            intensity: 0,
+            zebraEnabled: true,
+            zebraThreshold: 0.9
+        )
+        let aboveThreshold = try render(
+            device: device,
+            commandQueue: commandQueue,
+            pipelineState: pipelineState,
+            sourceColor: SIMD3<Float>(repeating: 0.95),
+            lutResource: lutResource,
+            intensity: 0,
+            zebraEnabled: true,
+            zebraThreshold: 0.9
+        )
+
+        XCTAssertEqual(belowThreshold.x, 0.6, accuracy: 0.02)
+        XCTAssertEqual(belowThreshold.y, 0.6, accuracy: 0.02)
+        XCTAssertEqual(belowThreshold.z, 0.6, accuracy: 0.02)
+        XCTAssertGreaterThan(aboveThreshold.x, 0.98)
+        XCTAssertGreaterThan(aboveThreshold.y, 0.98)
+        XCTAssertGreaterThan(aboveThreshold.z, 0.98)
+    }
+
     private func render(
         device: MTLDevice,
         commandQueue: MTLCommandQueue,
         pipelineState: MTLRenderPipelineState,
         sourceColor: SIMD3<Float>,
         lutResource: LUTTextureResource,
-        intensity: Float
+        intensity: Float,
+        colorEncoding: SourceColorEncoding = .rec709,
+        falseColorEnabled: Bool = false,
+        zebraEnabled: Bool = false,
+        zebraThreshold: Float = 0.9,
+        zebraMode: Float = 0
     ) throws -> SIMD3<Float> {
         let sourceTexture = makeTexture2D(device: device, pixelFormat: .rgba32Float, usage: [.shaderRead])
         var sourcePixel: [Float] = [sourceColor.x, sourceColor.y, sourceColor.z, 1]
@@ -110,6 +207,15 @@ final class MetalLUTShaderTests: XCTestCase {
             SIMD4<Float>(lutResource.domainMin.x, lutResource.domainMin.y, lutResource.domainMin.z, 0),
             SIMD4<Float>(lutResource.domainMax.x, lutResource.domainMax.y, lutResource.domainMax.z, 0)
         ]
+        var monitorUniforms = [
+            SIMD4<Float>(
+                ColorTransformPass.encodingCode(for: colorEncoding),
+                falseColorEnabled ? 1 : 0,
+                zebraEnabled ? 1 : 0,
+                zebraMode
+            ),
+            SIMD4<Float>(zebraThreshold, 0.4, 0.6, 0)
+        ]
 
         renderEncoder.setRenderPipelineState(pipelineState)
         renderEncoder.setFragmentTexture(sourceTexture, index: 0)
@@ -118,6 +224,9 @@ final class MetalLUTShaderTests: XCTestCase {
         renderEncoder.setFragmentSamplerState(samplerState, index: 1)
         uniforms.withUnsafeBytes { bytes in
             renderEncoder.setFragmentBytes(bytes.baseAddress!, length: bytes.count, index: 0)
+        }
+        monitorUniforms.withUnsafeBytes { bytes in
+            renderEncoder.setFragmentBytes(bytes.baseAddress!, length: bytes.count, index: 1)
         }
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         renderEncoder.endEncoding()
@@ -136,6 +245,20 @@ final class MetalLUTShaderTests: XCTestCase {
         }
 
         return SIMD3<Float>(outputPixel[0], outputPixel[1], outputPixel[2])
+    }
+
+    private func makePipelineState(device: MTLDevice) throws -> MTLRenderPipelineState? {
+        guard let library = device.makeDefaultLibrary(),
+              let vertexFunction = library.makeFunction(name: "previewVertex"),
+              let fragmentFunction = library.makeFunction(name: "previewFragment") else {
+            return nil
+        }
+
+        let pipelineDescriptor = MTLRenderPipelineDescriptor()
+        pipelineDescriptor.vertexFunction = vertexFunction
+        pipelineDescriptor.fragmentFunction = fragmentFunction
+        pipelineDescriptor.colorAttachments[0].pixelFormat = .rgba32Float
+        return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
 
     private func makeTexture2D(

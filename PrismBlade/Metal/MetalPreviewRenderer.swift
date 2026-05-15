@@ -33,6 +33,7 @@ final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
     private let frameLock = NSLock()
 
     private var latestFrame = VideoFrame.placeholder
+    private var monitorState = MonitorState.initial
     private var zoomMode: ZoomMode = .fit
     private var lutState = LUTState.initial
     private var lastRenderedSequence: Int?
@@ -103,6 +104,7 @@ final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
     func update(frame: VideoFrame, monitor: MonitorState, lut: LUTState) {
         frameLock.lock()
         latestFrame = frame
+        monitorState = monitor
         zoomMode = monitor.zoomMode
         lutState = lut
         frameLock.unlock()
@@ -144,6 +146,13 @@ final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
             lutUniforms.withUnsafeBytes { bytes in
                 renderEncoder.setFragmentBytes(bytes.baseAddress!, length: bytes.count, index: 0)
             }
+            let monitorUniforms = Self.makeMonitorUniforms(
+                monitor: renderSnapshot.monitor,
+                format: renderSnapshot.frame.format
+            )
+            monitorUniforms.withUnsafeBytes { bytes in
+                renderEncoder.setFragmentBytes(bytes.baseAddress!, length: bytes.count, index: 1)
+            }
             renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
             renderEncoder.endEncoding()
 
@@ -161,7 +170,12 @@ final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
 
     private func snapshot() -> RenderSnapshot {
         frameLock.lock()
-        let snapshot = RenderSnapshot(frame: latestFrame, zoomMode: zoomMode, lut: lutState)
+        let snapshot = RenderSnapshot(
+            frame: latestFrame,
+            monitor: monitorState,
+            zoomMode: zoomMode,
+            lut: lutState
+        )
         frameLock.unlock()
         return snapshot
     }
@@ -230,6 +244,26 @@ final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
         ]
     }
 
+    private static func makeMonitorUniforms(
+        monitor: MonitorState,
+        format: FrameFormat
+    ) -> [SIMD4<Float>] {
+        [
+            SIMD4<Float>(
+                ColorTransformPass.encodingCode(for: format.colorEncoding),
+                FalseColorPass.enabledFlag(for: monitor),
+                ZebraPass.enabledFlag(for: monitor),
+                ZebraPass.modeCode(for: monitor.zebraMode)
+            ),
+            SIMD4<Float>(
+                ZebraPass.thresholdFraction(for: monitor),
+                0.4,
+                0.6,
+                0
+            )
+        ]
+    }
+
     private func clear(
         drawable: CAMetalDrawable,
         renderPassDescriptor: MTLRenderPassDescriptor,
@@ -281,6 +315,7 @@ final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
 
 private struct RenderSnapshot {
     var frame: VideoFrame
+    var monitor: MonitorState
     var zoomMode: ZoomMode
     var lut: LUTState
 }

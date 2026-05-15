@@ -27,29 +27,145 @@ vertex PreviewVertexOut previewVertex(uint vertexID [[vertex_id]]) {
     return out;
 }
 
+float nlogDecode(float x);
+float hlgDecode(float x);
+float3 transformToWorkingSpace(float3 color, float encodingCode);
+float rec709Luma(float3 color);
+float3 falseColor(float luma);
+bool zebraApplies(float luma, constant float4 *monitorUniforms);
+float3 applyZebra(float3 color, float2 pixelPosition);
+
 fragment float4 previewFragment(
     PreviewVertexOut in [[stage_in]],
     texture2d<float, access::sample> sourceTexture [[texture(0)]],
     texture3d<float, access::sample> lutTexture [[texture(1)]],
     sampler sourceSampler [[sampler(0)]],
     sampler lutSampler [[sampler(1)]],
-    constant float4 *lutUniforms [[buffer(0)]]
+    constant float4 *lutUniforms [[buffer(0)]],
+    constant float4 *monitorUniforms [[buffer(1)]]
 ) {
     const float4 sourceColor = sourceTexture.sample(sourceSampler, in.textureCoordinate);
+    const float3 workingColor = transformToWorkingSpace(sourceColor.rgb, monitorUniforms[0].x);
     const float isEnabled = lutUniforms[0].x;
+    float3 displayColor = workingColor;
 
-    if (isEnabled < 0.5) {
-        return sourceColor;
+    if (isEnabled >= 0.5) {
+        const float intensity = clamp(lutUniforms[0].y, 0.0, 1.0);
+        const float cubeSize = max(lutUniforms[0].z, 1.0);
+        const float3 domainMin = lutUniforms[1].xyz;
+        const float3 domainMax = lutUniforms[2].xyz;
+        const float3 domainRange = max(domainMax - domainMin, float3(0.00001));
+        const float3 normalizedColor = clamp((workingColor - domainMin) / domainRange, 0.0, 1.0);
+        const float3 lutCoordinate = ((normalizedColor * (cubeSize - 1.0)) + 0.5) / cubeSize;
+        const float3 lutColor = lutTexture.sample(lutSampler, lutCoordinate).rgb;
+        displayColor = mix(workingColor, lutColor, intensity);
     }
 
-    const float intensity = clamp(lutUniforms[0].y, 0.0, 1.0);
-    const float cubeSize = max(lutUniforms[0].z, 1.0);
-    const float3 domainMin = lutUniforms[1].xyz;
-    const float3 domainMax = lutUniforms[2].xyz;
-    const float3 domainRange = max(domainMax - domainMin, float3(0.00001));
-    const float3 normalizedColor = clamp((sourceColor.rgb - domainMin) / domainRange, 0.0, 1.0);
-    const float3 lutCoordinate = ((normalizedColor * (cubeSize - 1.0)) + 0.5) / cubeSize;
-    const float3 lutColor = lutTexture.sample(lutSampler, lutCoordinate).rgb;
+    const float luma = rec709Luma(workingColor);
 
-    return float4(mix(sourceColor.rgb, lutColor, intensity), sourceColor.a);
+    if (monitorUniforms[0].y >= 0.5) {
+        displayColor = falseColor(luma);
+    }
+
+    if (monitorUniforms[0].z >= 0.5 && zebraApplies(luma, monitorUniforms)) {
+        displayColor = applyZebra(displayColor, in.position.xy);
+    }
+
+    return float4(clamp(displayColor, 0.0, 1.0), sourceColor.a);
+}
+
+float nlogDecode(float x) {
+    const float cut = 452.0 / 1023.0;
+    const float a = 650.0 / 1023.0;
+    const float b = 0.0075;
+    const float c = 150.0 / 1023.0;
+    const float d = 619.0 / 1023.0;
+
+    x = clamp(x, 0.0, 1.0);
+    if (x < cut) {
+        return clamp(pow(max(x / a, 0.0), 3.0) - b, 0.0, 1.0);
+    }
+
+    return clamp(exp((x - d) / c), 0.0, 1.0);
+}
+
+float hlgDecode(float x) {
+    const float a = 0.17883277;
+    const float b = 0.28466892;
+    const float c = 0.55991073;
+
+    x = clamp(x, 0.0, 1.0);
+    if (x <= 0.5) {
+        return clamp((x * x) / 3.0, 0.0, 1.0);
+    }
+
+    return clamp((exp((x - c) / a) + b) / 12.0, 0.0, 1.0);
+}
+
+float3 transformToWorkingSpace(float3 color, float encodingCode) {
+    if (encodingCode < 0.5) {
+        return clamp(color, 0.0, 1.0);
+    }
+
+    if (encodingCode < 1.5) {
+        return float3(nlogDecode(color.r), nlogDecode(color.g), nlogDecode(color.b));
+    }
+
+    return float3(hlgDecode(color.r), hlgDecode(color.g), hlgDecode(color.b));
+}
+
+float rec709Luma(float3 color) {
+    return dot(color, float3(0.2126, 0.7152, 0.0722));
+}
+
+float3 falseColor(float luma) {
+    const float ire = clamp(luma, 0.0, 1.2) * 100.0;
+
+    if (ire <= 5.0) {
+        return float3(0.24, 0.05, 0.82);
+    }
+
+    if (abs(ire - 18.0) <= 2.0) {
+        return float3(0.48, 0.48, 0.48);
+    }
+
+    if (ire < 40.0) {
+        return float3(0.06, 0.26, 0.90);
+    }
+
+    if (ire <= 60.0) {
+        return float3(0.10, 0.86, 0.26);
+    }
+
+    if (ire < 90.0) {
+        return float3(0.88, 0.88, 0.22);
+    }
+
+    if (ire < 99.5) {
+        return float3(1.00, 0.54, 0.05);
+    }
+
+    return float3(1.00, 0.02, 0.02);
+}
+
+bool zebraApplies(float luma, constant float4 *monitorUniforms) {
+    const float mode = monitorUniforms[0].w;
+    const float threshold = clamp(monitorUniforms[1].x, 0.0, 1.0);
+
+    if (mode < 0.5) {
+        return luma >= threshold;
+    }
+
+    const float lower = min(monitorUniforms[1].y, monitorUniforms[1].z);
+    const float upper = max(monitorUniforms[1].y, monitorUniforms[1].z);
+    return luma >= lower && luma <= upper;
+}
+
+float3 applyZebra(float3 color, float2 pixelPosition) {
+    const float stripe = fmod(pixelPosition.x + pixelPosition.y, 14.0);
+    if (stripe < 7.0) {
+        return mix(color, float3(1.0), 0.88);
+    }
+
+    return mix(color, float3(0.0), 0.58);
 }

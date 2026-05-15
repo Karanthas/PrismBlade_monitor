@@ -32,6 +32,9 @@
 		AA0000000000000000000133 /* PreviewShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000236 /* PreviewShaders.metal */; };
 		AA0000000000000000000135 /* LUTStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000238 /* LUTStore.swift */; };
 		AA0000000000000000000136 /* LUTPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000239 /* LUTPass.swift */; };
+		AA0000000000000000000141 /* ColorTransformPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000244 /* ColorTransformPass.swift */; };
+		AA0000000000000000000142 /* FalseColorPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000245 /* FalseColorPass.swift */; };
+		AA0000000000000000000143 /* ZebraPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000246 /* ZebraPass.swift */; };
 		AA0000000000000000000137 /* LUTRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000240 /* LUTRepositoryTests.swift */; };
 		AA0000000000000000000138 /* LUTPassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000241 /* LUTPassTests.swift */; };
 		AA0000000000000000000139 /* MetalLUTShaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000242 /* MetalLUTShaderTests.swift */; };
@@ -103,6 +106,9 @@
 		AA0000000000000000000241 /* LUTPassTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTPassTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000242 /* MetalLUTShaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalLUTShaderTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000243 /* LUTs */ = {isa = PBXFileReference; lastKnownFileType = folder; path = LUTs; sourceTree = "<group>"; };
+		AA0000000000000000000244 /* ColorTransformPass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorTransformPass.swift; sourceTree = "<group>"; };
+		AA0000000000000000000245 /* FalseColorPass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FalseColorPass.swift; sourceTree = "<group>"; };
+		AA0000000000000000000246 /* ZebraPass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZebraPass.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -222,6 +228,9 @@
 				AA0000000000000000000234 /* MetalPreviewRenderer.swift */,
 				AA0000000000000000000235 /* MetalPreviewSurface.swift */,
 				AA0000000000000000000236 /* PreviewShaders.metal */,
+				AA0000000000000000000244 /* ColorTransformPass.swift */,
+				AA0000000000000000000245 /* FalseColorPass.swift */,
+				AA0000000000000000000246 /* ZebraPass.swift */,
 			);
 			path = Metal;
 			sourceTree = "<group>";
@@ -424,6 +433,9 @@
 				AA0000000000000000000133 /* PreviewShaders.metal in Sources */,
 				AA0000000000000000000135 /* LUTStore.swift in Sources */,
 				AA0000000000000000000136 /* LUTPass.swift in Sources */,
+				AA0000000000000000000141 /* ColorTransformPass.swift in Sources */,
+				AA0000000000000000000142 /* FalseColorPass.swift in Sources */,
+				AA0000000000000000000143 /* ZebraPass.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
