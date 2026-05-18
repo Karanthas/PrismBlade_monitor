@@ -5,8 +5,17 @@
 
 # Xcode user state
 xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
 *.xcuserstate
 *.xcscmblueprint
+
+# Keep shared product schemes commit-friendly, but keep local-only testing
+# schemes out of git because they may contain absolute material/ paths.
+*.xcodeproj/xcshareddata/xcschemes/*Local*.xcscheme
+*.xcodeproj/xcshareddata/xcschemes/*local*.xcscheme
+*.xcodeproj/xcshareddata/xcschemes/*Test*.xcscheme
+*.xcodeproj/xcshareddata/xcschemes/*test*.xcscheme
 
 # Xcode build products
 DerivedData/

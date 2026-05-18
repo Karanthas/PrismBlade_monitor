@@ -352,6 +352,15 @@ Current filename convention:
 - `material/NLOG.MOV`
 - `material/HLG.MOV`
 
+For local manual testing, duplicate an Xcode scheme locally, for example `PrismBlade Local Video`, and pass a test video path through `Run > Arguments > Arguments Passed On Launch`:
+
+```text
+-PBLocalVideoPath
+/Users/chronus/code/diy/monitor/material/NLOG.MOV
+```
+
+When `AppEnvironment` sees `-PBLocalVideoPath`, it temporarily injects `VideoFileFrameSource` so local real materials can be used to validate LUTs, false color, zebra, and scopes before real camera communication exists. This is a local testing hook only; it should not become a user-visible video-source switch. Once the real camera `FrameSource` is implemented, remove this launch-argument hook or route the default path back to the camera source.
+
 Automated tests do not depend on those real materials. Tests generate small temporary `.mov` fixtures to verify `AVAssetReader`, use simulated BGRA pixel buffers to verify Metal bridging, and use generated gray / clipping / float-texture inputs for Stage 5 color-conversion, false-color, zebra, and Stage 6 scope compute checks.
 
 Real gray-card, color-chart, skin-tone, overexposure, underexposure, dark-noise, and reference waveform / RGB Parade materials are still needed for deeper Stage 5-7 calibration. Keep those assets in `material/`; the directory is ignored and should remain local.

@@ -352,6 +352,15 @@ xcodebuild \
 - `material/NLOG.MOV`
 - `material/HLG.MOV`
 
+本地手动测试可以复制一个只保存在本机的 Xcode scheme，例如 `PrismBlade Local Video`，并在 `Run > Arguments > Arguments Passed On Launch` 中传入测试视频路径：
+
+```text
+-PBLocalVideoPath
+/Users/chronus/code/diy/monitor/material/NLOG.MOV
+```
+
+`AppEnvironment` 会在检测到 `-PBLocalVideoPath` 时临时注入 `VideoFileFrameSource`，用于本地手动验证真实素材、LUT、伪色、斑马纹和 scope。这个入口只用于当前真实相机通信尚未完成前的本地测试，不应做成用户可见的视频来源切换。等真实相机 `FrameSource` 开发完成后，需要移除这个 launch argument 测试入口，或改回默认相机源路径。
+
 自动化测试不依赖这些真实素材；测试会临时生成小型 `.mov` fixture 来验证 `AVAssetReader`，使用模拟 BGRA pixel buffer 验证 Metal bridge，并使用生成的灰阶、clipping 和 float texture 输入验证阶段 5 颜色转换、伪色、斑马纹，以及阶段 6 scope compute。
 
 真实灰卡、色卡、肤色、过曝、欠曝、暗部噪声，以及参考 waveform / RGB Parade 素材仍然是后续阶段 5-7 深度校准所需素材。请继续把这些资源放在 `material/` 下；该目录已被忽略，应只保留在本地。
