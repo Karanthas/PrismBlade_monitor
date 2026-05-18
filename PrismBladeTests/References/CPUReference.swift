@@ -56,6 +56,32 @@ enum CPUReference {
         return bins
     }
 
+    static func rgbParadeBins(
+        pixels: [RGBDouble],
+        width: Int,
+        height: Int,
+        binCount: Int
+    ) -> (red: [Int], green: [Int], blue: [Int]) {
+        guard width > 0, height > 0, binCount > 0 else {
+            return ([], [], [])
+        }
+
+        var redBins = Array(repeating: 0, count: width * binCount)
+        var greenBins = redBins
+        var blueBins = redBins
+
+        for y in 0..<height {
+            for x in 0..<width {
+                let pixel = pixels[y * width + x]
+                redBins[x * binCount + bin(for: pixel.red, binCount: binCount)] += 1
+                greenBins[x * binCount + bin(for: pixel.green, binCount: binCount)] += 1
+                blueBins[x * binCount + bin(for: pixel.blue, binCount: binCount)] += 1
+            }
+        }
+
+        return (redBins, greenBins, blueBins)
+    }
+
     static func sampleNearest3DLUT(
         input: RGBDouble,
         entries: [RGBDouble],
@@ -110,6 +136,10 @@ enum CPUReference {
 
     private static func nearestIndex(for value: Double, size: Int) -> Int {
         min(max(Int((clamp01(value) * Double(size - 1)).rounded()), 0), size - 1)
+    }
+
+    private static func bin(for value: Double, binCount: Int) -> Int {
+        min(max(Int((clamp01(value) * Double(binCount - 1)).rounded()), 0), binCount - 1)
     }
 
     private static func axisPosition(_ value: Double, size: Int) -> (low: Int, high: Int, fraction: Double) {

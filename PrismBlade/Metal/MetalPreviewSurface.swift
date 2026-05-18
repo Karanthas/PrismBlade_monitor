@@ -1,3 +1,4 @@
+import Foundation
 import MetalKit
 import SwiftUI
 
@@ -6,6 +7,7 @@ struct MetalPreviewSurface: UIViewRepresentable {
     var monitor: MonitorState
     var lut: LUTState
     var lutStore: LUTStore
+    var onScopeData: (ScopeData) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -36,6 +38,7 @@ struct MetalPreviewSurface: UIViewRepresentable {
                 lutStore: lutStore
             )
             renderer.update(frame: frame, monitor: monitor, lut: lut)
+            renderer.scopeDataHandler = makeScopeDataHandler()
             context.coordinator.renderer = renderer
             view.delegate = renderer
         } catch {
@@ -47,7 +50,16 @@ struct MetalPreviewSurface: UIViewRepresentable {
     }
 
     func updateUIView(_ view: MTKView, context: Context) {
+        context.coordinator.renderer?.scopeDataHandler = makeScopeDataHandler()
         context.coordinator.renderer?.update(frame: frame, monitor: monitor, lut: lut)
+    }
+
+    private func makeScopeDataHandler() -> (ScopeData) -> Void {
+        { scopeData in
+            DispatchQueue.main.async {
+                onScopeData(scopeData)
+            }
+        }
     }
 
     final class Coordinator {

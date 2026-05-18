@@ -27,6 +27,7 @@ final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
     private let textureBridge: MetalTextureBridge
     private let lutStore: LUTStore
     private let lutPass: LUTPass
+    private let frameProcessor: MetalFrameProcessor
     private let pipelineState: MTLRenderPipelineState
     private let samplerState: MTLSamplerState
     private let lutSamplerState: MTLSamplerState
@@ -37,6 +38,7 @@ final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
     private var zoomMode: ZoomMode = .fit
     private var lutState = LUTState.initial
     private var lastRenderedSequence: Int?
+    var scopeDataHandler: ((ScopeData) -> Void)?
 
     init(device: MTLDevice, colorPixelFormat: MTLPixelFormat, lutStore: LUTStore) throws {
         self.device = device
@@ -60,6 +62,8 @@ final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
         guard let fragmentFunction = library.makeFunction(name: "previewFragment") else {
             throw RendererError.shaderFunctionMissing("previewFragment")
         }
+
+        let frameProcessor = try MetalFrameProcessor(device: device, library: library)
 
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.label = "PrismBlade Preview Pipeline"
@@ -94,6 +98,7 @@ final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
         self.commandQueue = commandQueue
         self.textureBridge = textureBridge
         self.lutPass = lutPass
+        self.frameProcessor = frameProcessor
         self.pipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
         self.samplerState = samplerState
         self.lutSamplerState = lutSamplerState
@@ -122,6 +127,14 @@ final class MetalPreviewRenderer: NSObject, MTKViewDelegate {
         do {
             let sourceTexture = try textureBridge.makeTexture(from: renderSnapshot.frame.pixelBuffer)
             let lutRenderState = resolveLUTRenderState(from: renderSnapshot.lut)
+            frameProcessor.encodeScopeIfNeeded(
+                sourceTexture: sourceTexture,
+                frame: renderSnapshot.frame,
+                monitor: renderSnapshot.monitor,
+                commandBuffer: commandBuffer
+            ) { [weak self] scopeData in
+                self?.scopeDataHandler?(scopeData)
+            }
 
             guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
                 return

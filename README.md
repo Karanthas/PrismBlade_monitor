@@ -1,12 +1,12 @@
 # PrismBlade
 
-**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch is moving through the `v0.2.1` Metal-first plan. Stages 3-5 now have a working vertical slice: the project has a real `CVPixelBuffer` media frame model, a BGRA simulated frame source, an `AVAssetReader` video-file frame source, a `CVPixelBuffer -> MTLTexture -> MTKView drawable` Metal preview loop, display-only 3D LUT sampling, centralized Rec.709 / N-Log / HLG display-space conversion, and shader-based false color / zebra exposure assists.
+**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch is moving through the `v0.2.1` Metal-first plan. Stages 3-6 now have a working vertical slice: the project has a real `CVPixelBuffer` media frame model, a BGRA simulated frame source, an `AVAssetReader` video-file frame source, a `CVPixelBuffer -> MTLTexture -> MTKView drawable` Metal preview loop, display-only 3D LUT sampling, centralized Rec.709 / N-Log / HLG display-space conversion, shader-based false color / zebra exposure assists, and Metal compute scope bins for Luma waveform / RGB Parade.
 
 > Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
 ## Status
 
-This repository currently contains a simulator-ready SwiftUI prototype plus the `v0.2.1` Stage 3 Metal preview loop, Stage 4 LUT rendering path, and the first Stage 5 color-conversion / exposure-assist slice. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
+This repository currently contains a simulator-ready SwiftUI prototype plus the `v0.2.1` Stage 3 Metal preview loop, Stage 4 LUT rendering path, Stage 5 color-conversion / exposure-assist slice, and Stage 6 Metal compute scope path. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
 
 The app is intentionally built around replaceable boundaries:
 
@@ -19,6 +19,7 @@ The app is intentionally built around replaceable boundaries:
 - `LUTStore` and `LUTRepository` load imported LUTs and optional local `.cube` resources without requiring redistributable vendor LUTs in the repository.
 - `LUTPass` uploads parsed `.cube` data into a 3D Metal texture and caches texture resources per LUT descriptor.
 - `ColorTransformPass`, `FalseColorPass`, and `ZebraPass` provide the Swift-side state mapping for the Stage 5 shader uniforms.
+- `MetalFrameProcessor` and `ScopeComputePass` run throttled Metal compute analysis and read back compact `ScopeData` bins for the SwiftUI scope panel.
 - `CameraTransport` owns camera communication and can later be replaced by ImageCaptureCore, PTP, or a network bridge.
 - `CameraCommandService` validates camera writes before they reach the transport layer.
 - LUT parsing and repository logic are separate from the monitor UI.
@@ -38,6 +39,7 @@ The app is intentionally built around replaceable boundaries:
 - Display-only 3D LUT application in the Metal preview shader, with working-space/LUT output mixed by LUT intensity.
 - Shader-based false color using converted display-space luma.
 - Shader-based high zebra and range zebra masks using converted display-space luma and the settings threshold.
+- Metal compute Luma waveform and RGB Parade scope bins, displayed by `ScopePanel` instead of generated placeholder curves.
 - `LUTPass` conversion from parsed `.cube` entries to `.rgba32Float` 3D `MTLTexture` resources.
 - Identity fallback LUT resource so the renderer can keep drawing when no LUT is enabled or a selected LUT cannot be resolved.
 - SwiftUI / Metal integration through an `MTKView` wrapped in `UIViewRepresentable`, replacing the SwiftUI gradient placeholder as the main preview.
@@ -264,9 +266,9 @@ Expected result:
 ** BUILD SUCCEEDED **
 ```
 
-### Run Stage 3-5 Tests
+### Run Stage 3-6 Tests
 
-Stage 3 moves the main preview from SwiftUI synthetic drawing to an `MTKView`. Stage 4 adds real LUT texture upload and fragment-shader LUT sampling. The first Stage 5 slice adds centralized Rec.709 / N-Log / HLG display conversion plus shader-based false color and zebra. The effect you should verify is that the test target builds and the simulated frame source, video-file frame source, Metal texture bridge, LUT repository, LUT pass, color transform, and Metal shader tests pass.
+Stage 3 moves the main preview from SwiftUI synthetic drawing to an `MTKView`. Stage 4 adds real LUT texture upload and fragment-shader LUT sampling. Stage 5 adds centralized Rec.709 / N-Log / HLG display conversion plus shader-based false color and zebra. Stage 6 adds Metal compute bins for Luma waveform and RGB Parade. The effect you should verify is that the test target builds and the simulated frame source, video-file frame source, Metal texture bridge, LUT repository, LUT pass, color transform, Metal shader, and scope compute tests pass.
 
 #### Option A: Xcode
 
@@ -289,6 +291,7 @@ You should see these suites:
 - `LUTRepositoryTests`
 - `LUTPassTests`
 - `MetalLUTShaderTests`
+- `ScopeComputePassTests`
 
 #### Option B: Terminal
 
@@ -336,7 +339,7 @@ Expected result:
 ** TEST EXECUTE SUCCEEDED **
 ```
 
-The current Stage 3-5 suite contains 43 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
+The current Stage 3-6 suite contains 48 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
 
 ### Local Real Materials
 
@@ -348,9 +351,9 @@ Current filename convention:
 - `material/NLOG.MOV`
 - `material/HLG.MOV`
 
-Automated tests do not depend on those real materials. Tests generate small temporary `.mov` fixtures to verify `AVAssetReader`, use simulated BGRA pixel buffers to verify Metal bridging, and use generated gray / clipping / float-texture inputs for the first Stage 5 color-conversion, false-color, and zebra checks.
+Automated tests do not depend on those real materials. Tests generate small temporary `.mov` fixtures to verify `AVAssetReader`, use simulated BGRA pixel buffers to verify Metal bridging, and use generated gray / clipping / float-texture inputs for Stage 5 color-conversion, false-color, zebra, and Stage 6 scope compute checks.
 
-Real gray-card, color-chart, skin-tone, overexposure, underexposure, dark-noise, and reference waveform / RGB Parade materials are still needed for deeper Stage 5 and Stage 7 calibration. Keep those assets in `material/`; the directory is ignored and should remain local.
+Real gray-card, color-chart, skin-tone, overexposure, underexposure, dark-noise, and reference waveform / RGB Parade materials are still needed for deeper Stage 5-7 calibration. Keep those assets in `material/`; the directory is ignored and should remain local.
 
 ### Local LUT Materials
 
@@ -378,7 +381,7 @@ Use the floating tool buttons to toggle monitor assists:
 
 The scope panel is intentionally compact in `v0.1.3`: waveform and RGB Parade use about 40% of the screen width so they do not dominate the monitored image. When the camera parameter adjustment panel is open, the scope panel moves upward to avoid overlapping the bottom controls.
 
-Starting in Stage 3, the main preview is drawn by `MTKView`: `VideoFrame.pixelBuffer` is bridged through `CVMetalTextureCache` into `MTLTexture`, then sampled by `PreviewShaders.metal` into the drawable. Stage 4 binds a 3D LUT texture and mixes LUT output by intensity in the fragment shader. Stage 5 now sends the input color encoding and exposure-assist state into the shader, so the preview path is:
+Starting in Stage 3, the main preview is drawn by `MTKView`: `VideoFrame.pixelBuffer` is bridged through `CVMetalTextureCache` into `MTLTexture`, then sampled by `PreviewShaders.metal` into the drawable. Stage 4 binds a 3D LUT texture and mixes LUT output by intensity in the fragment shader. Stage 5 sends the input color encoding and exposure-assist state into the shader. Stage 6 adds a throttled compute side path that reads the same source texture and produces compact `ScopeData` bins, so the preview path is:
 
 ```text
 source texture
@@ -387,9 +390,12 @@ source texture
   -> false color, if enabled
   -> zebra, if enabled
   -> MTKView drawable
+  -> side path: ScopeComputePass, if scope is enabled
+  -> ScopeData readback
+  -> ScopePanel
 ```
 
-The scope overlay is still a SwiftUI placeholder driven by existing panel logic; real Metal compute scope remains future work.
+The scope overlay now draws `ScopeData` bins from Metal compute. If readback is delayed, SwiftUI keeps displaying the previous scope data while preview rendering continues.
 
 ### LUT Import
 
@@ -487,21 +493,21 @@ The app build, simulator test build, and test execution succeeded on an iPhone 1
 
 Recommended next development steps:
 
-1. Harden the `v0.2.1` Stage 4-5 display path.
+1. Harden the `v0.2.1` Stage 4-6 display and scope path.
    - Add more real-material validation with optional local Nikon / N-Log LUTs.
    - Keep local vendor LUT assets out of the repository unless redistribution is confirmed.
    - Decide whether LUT suggestions should be gated by `FrameFormat.colorEncoding`.
-   - Calibrate N-Log / HLG, false color, and zebra behavior after real gray-card, color-chart, skin-tone, and reference waveform materials arrive.
+   - Calibrate N-Log / HLG, false color, zebra, waveform, and RGB Parade behavior after real gray-card, color-chart, skin-tone, and reference scope materials arrive.
 
 2. Split the current preview shader into clearer pass boundaries when the pipeline grows.
-   - Promote the current shader logic into `MetalFrameProcessor` orchestration.
+   - Continue moving orchestration into `MetalFrameProcessor` as color, LUT, exposure, and scope passes become more independent.
    - Keep color conversion as the single input interpretation point.
    - Keep false color and zebra display-only.
 
-3. Implement real scope analysis.
-   - Sample frames at a reduced resolution.
-   - Generate Luma waveform from pixel values.
-   - Generate RGB Parade from channel values.
+3. Deepen scope validation.
+   - Add reduced-resolution sampling options for heavier real footage.
+   - Compare Luma waveform and RGB Parade against reference screenshots.
+   - Tune bin dimensions and analysis interval on iPhone 12 Pro hardware.
    - Add frame skipping to protect simulator and iPhone 12 Pro performance.
 
 4. Continue expanding tests with each rendering slice.

@@ -67,4 +67,28 @@ final class CPUReferenceTests: XCTestCase {
             1, 0, 0, 1
         ])
     }
+
+    func testRGBParadeBinsAccumulateChannelsIndependently() {
+        let pixels = [
+            RGBDouble(red: 1, green: 0, blue: 0),
+            RGBDouble(red: 0, green: 1, blue: 0),
+            RGBDouble(red: 0, green: 0, blue: 1),
+            RGBDouble(red: 1, green: 1, blue: 1)
+        ]
+
+        let bins = CPUReference.rgbParadeBins(pixels: pixels, width: 2, height: 2, binCount: 4)
+
+        XCTAssertEqual(bins.red, [
+            1, 0, 0, 1,
+            1, 0, 0, 1
+        ])
+        XCTAssertEqual(bins.green, [
+            2, 0, 0, 0,
+            0, 0, 0, 2
+        ])
+        XCTAssertEqual(bins.blue, [
+            1, 0, 0, 1,
+            1, 0, 0, 1
+        ])
+    }
 }

@@ -34,6 +34,7 @@ float rec709Luma(float3 color);
 float3 falseColor(float luma);
 bool zebraApplies(float luma, constant float4 *monitorUniforms);
 float3 applyZebra(float3 color, float2 pixelPosition);
+uint scopeBin(float value, uint binHeight);
 
 fragment float4 previewFragment(
     PreviewVertexOut in [[stage_in]],
@@ -168,4 +169,47 @@ float3 applyZebra(float3 color, float2 pixelPosition) {
     }
 
     return mix(color, float3(0.0), 0.58);
+}
+
+kernel void scopeCompute(
+    texture2d<float, access::read> sourceTexture [[texture(0)]],
+    device atomic_uint *lumaBins [[buffer(0)]],
+    device atomic_uint *redBins [[buffer(1)]],
+    device atomic_uint *greenBins [[buffer(2)]],
+    device atomic_uint *blueBins [[buffer(3)]],
+    constant float4 *scopeUniforms [[buffer(4)]],
+    uint2 gid [[thread_position_in_grid]]
+) {
+    const uint sourceWidth = sourceTexture.get_width();
+    const uint sourceHeight = sourceTexture.get_height();
+    const uint sampleWidth = max(uint(scopeUniforms[1].z), 1u);
+    const uint sampleHeight = max(uint(scopeUniforms[1].w), 1u);
+
+    if (gid.x >= sampleWidth || gid.y >= sampleHeight) {
+        return;
+    }
+
+    const uint binWidth = max(uint(scopeUniforms[0].x), 1u);
+    const uint binHeight = max(uint(scopeUniforms[0].y), 1u);
+    const float encodingCode = scopeUniforms[0].z;
+    const uint sourceX = min(uint((float(gid.x) + 0.5) * float(sourceWidth) / float(sampleWidth)), sourceWidth - 1u);
+    const uint sourceY = min(uint((float(gid.y) + 0.5) * float(sourceHeight) / float(sampleHeight)), sourceHeight - 1u);
+    const float4 sourceColor = sourceTexture.read(uint2(sourceX, sourceY));
+    const float3 workingColor = transformToWorkingSpace(sourceColor.rgb, encodingCode);
+    const uint column = min((gid.x * binWidth) / sampleWidth, binWidth - 1u);
+
+    const uint lumaIndex = column * binHeight + scopeBin(rec709Luma(workingColor), binHeight);
+    const uint redIndex = column * binHeight + scopeBin(workingColor.r, binHeight);
+    const uint greenIndex = column * binHeight + scopeBin(workingColor.g, binHeight);
+    const uint blueIndex = column * binHeight + scopeBin(workingColor.b, binHeight);
+
+    atomic_fetch_add_explicit(&lumaBins[lumaIndex], 1u, memory_order_relaxed);
+    atomic_fetch_add_explicit(&redBins[redIndex], 1u, memory_order_relaxed);
+    atomic_fetch_add_explicit(&greenBins[greenIndex], 1u, memory_order_relaxed);
+    atomic_fetch_add_explicit(&blueBins[blueIndex], 1u, memory_order_relaxed);
+}
+
+uint scopeBin(float value, uint binHeight) {
+    const float clamped = clamp(value, 0.0, 1.0);
+    return min(uint(round(clamped * float(binHeight - 1u))), binHeight - 1u);
 }

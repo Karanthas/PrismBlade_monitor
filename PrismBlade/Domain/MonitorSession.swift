@@ -6,6 +6,7 @@ final class MonitorSession: ObservableObject {
     // MonitorSession 是主 UI 状态容器；所有 @Published 更新固定在 MainActor，避免 SwiftUI 跨线程刷新。
     @Published private(set) var state = MonitorSessionState()
     @Published private(set) var latestFrame = VideoFrame.placeholder
+    @Published private(set) var scopeData: ScopeData?
     @Published private(set) var lastUserMessage: String?
     let lutStore: LUTStore
 
@@ -96,6 +97,9 @@ final class MonitorSession: ObservableObject {
 
     func setScopeMode(_ mode: ScopeMode) {
         state.monitor.scopeMode = mode
+        if mode == .off {
+            scopeData = nil
+        }
         defaults.set(mode.rawValue, forKey: DefaultsKey.scopeMode)
     }
 
@@ -189,6 +193,11 @@ final class MonitorSession: ObservableObject {
                 self?.lastUserMessage = nil
             }
         }
+    }
+
+    func updateScopeData(_ data: ScopeData) {
+        guard state.monitor.scopeMode != .off, data.isValid else { return }
+        scopeData = data
     }
 
     func importLUT(from url: URL) async {

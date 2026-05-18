@@ -22,7 +22,10 @@ struct MonitorScreen: View {
                     frame: session.latestFrame,
                     monitor: session.state.monitor,
                     lut: session.state.lut,
-                    lutStore: session.lutStore
+                    lutStore: session.lutStore,
+                    onScopeData: { scopeData in
+                        session.updateScopeData(scopeData)
+                    }
                 )
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
@@ -40,7 +43,7 @@ struct MonitorScreen: View {
                             ScopePanel(
                                 mode: session.state.monitor.scopeMode,
                                 opacity: session.state.monitor.scopeOpacity,
-                                frame: session.latestFrame
+                                data: session.scopeData
                             )
                             .frame(width: scopeWidth, height: usePortraitLayout ? 118 : 132)
                             .padding(.leading, usePortraitLayout ? 12 : 72)

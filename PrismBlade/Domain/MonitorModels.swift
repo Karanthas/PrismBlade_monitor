@@ -8,6 +8,26 @@ struct MonitorSessionState: Equatable {
     var lut: LUTState = .initial
 }
 
+struct ScopeData: Equatable {
+    var lumaBins: [Float]
+    var redBins: [Float]
+    var greenBins: [Float]
+    var blueBins: [Float]
+    var binWidth: Int
+    var binHeight: Int
+    var sourceSequence: Int
+
+    var isValid: Bool {
+        let expectedCount = binWidth * binHeight
+        return binWidth > 0 &&
+            binHeight > 0 &&
+            lumaBins.count == expectedCount &&
+            redBins.count == expectedCount &&
+            greenBins.count == expectedCount &&
+            blueBins.count == expectedCount
+    }
+}
+
 enum ConnectionState: Equatable {
     case disconnected
     case searching

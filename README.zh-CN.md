@@ -1,12 +1,12 @@
 # PrismBlade 中文说明
 
-**PrismBlade** 是一个面向 Nikon Z6III 工作流的 iOS 相机监看 App 原型。当前分支正在按 `v0.2.1` Metal-first 计划推进。阶段 3-5 已经形成一个可运行的纵向切片：项目现在有真实 `CVPixelBuffer` 媒体帧模型、BGRA 模拟帧源、`AVAssetReader` 视频文件帧源、`CVPixelBuffer -> MTLTexture -> MTKView drawable` 的 Metal 预览闭环、显示链路 3D LUT 采样、集中式 Rec.709 / N-Log / HLG 显示空间转换，以及 shader 级伪色 / 斑马纹曝光辅助。
+**PrismBlade** 是一个面向 Nikon Z6III 工作流的 iOS 相机监看 App 原型。当前分支正在按 `v0.2.1` Metal-first 计划推进。阶段 3-6 已经形成一个可运行的纵向切片：项目现在有真实 `CVPixelBuffer` 媒体帧模型、BGRA 模拟帧源、`AVAssetReader` 视频文件帧源、`CVPixelBuffer -> MTLTexture -> MTKView drawable` 的 Metal 预览闭环、显示链路 3D LUT 采样、集中式 Rec.709 / N-Log / HLG 显示空间转换、shader 级伪色 / 斑马纹曝光辅助，以及用于 Luma waveform / RGB Parade 的 Metal compute scope bins。
 
 > 英文主版本：[README.md](README.md)
 
 ## 当前状态
 
-当前仓库包含一个可在 iOS Simulator 构建的 SwiftUI 原型工程，并完成了 `v0.2.1` 阶段 3 的 Metal 预览闭环、阶段 4 的 LUT 渲染路径，以及阶段 5 的首个颜色转换 / 曝光辅助切片。它目前**不会连接真实 Nikon 相机**，**不会实现 USB/PTP 通信**，也**不会移植 `libgphoto2`**。
+当前仓库包含一个可在 iOS Simulator 构建的 SwiftUI 原型工程，并完成了 `v0.2.1` 阶段 3 的 Metal 预览闭环、阶段 4 的 LUT 渲染路径、阶段 5 的颜色转换 / 曝光辅助切片，以及阶段 6 的 Metal compute scope 路径。它目前**不会连接真实 Nikon 相机**，**不会实现 USB/PTP 通信**，也**不会移植 `libgphoto2`**。
 
 这个阶段的代码重点是建立可替换边界：
 
@@ -19,6 +19,7 @@
 - `LUTStore` 和 `LUTRepository` 负责加载导入 LUT 与可选本地 `.cube` 资源，不要求仓库内再分发厂商 LUT。
 - `LUTPass` 将解析后的 `.cube` 数据上传为 3D Metal texture，并按 LUT descriptor 缓存 texture resource。
 - `ColorTransformPass`、`FalseColorPass`、`ZebraPass` 负责阶段 5 shader uniforms 的 Swift 侧状态映射。
+- `MetalFrameProcessor` 和 `ScopeComputePass` 负责节流后的 Metal compute 分析，并把紧凑的 `ScopeData` bins 回传给 SwiftUI scope 面板。
 - `CameraTransport` 负责相机通信，后续可以替换成 ImageCaptureCore、PTP 或网络桥接实现。
 - `CameraCommandService` 在命令进入 transport 前做参数校验。
 - LUT 解析和仓库逻辑与监看 UI 分离。
@@ -38,6 +39,7 @@
 - Metal preview shader 中的显示链路 3D LUT 应用，并通过 LUT intensity 混合工作空间画面和 LUT 后画面。
 - 基于转换后显示亮度的 shader 伪色。
 - 基于转换后显示亮度和设置阈值的 High Zebra / Range Zebra mask。
+- Metal compute 生成的 Luma waveform 和 RGB Parade scope bins，由 `ScopePanel` 绘制，不再使用程序占位曲线。
 - `LUTPass` 将解析后的 `.cube` entries 转换为 `.rgba32Float` 3D `MTLTexture` resource。
 - identity fallback LUT resource：未启用 LUT 或无法解析当前 LUT 时，renderer 仍可继续绘制。
 - SwiftUI / Metal 集成：`MetalPreviewSurface` 通过 `UIViewRepresentable` 包装 `MTKView`，替代主预览中的 SwiftUI gradient 占位层。
@@ -264,9 +266,9 @@ xcodebuild \
 ** BUILD SUCCEEDED **
 ```
 
-### 运行阶段 3-5 测试
+### 运行阶段 3-6 测试
 
-阶段 3 的关键变化是主预览从 SwiftUI 合成画面切到 `MTKView`。阶段 4 新增真实 LUT texture 上传和 fragment shader LUT 采样。阶段 5 首个切片新增集中式 Rec.709 / N-Log / HLG 显示转换，以及 shader 级伪色和斑马纹。你要验证的效果是：测试 target 能构建，fixtures 能生成，模拟帧源、视频文件帧源、Metal texture bridge、LUT repository、LUT pass、颜色转换和 Metal shader 自动化测试能全部通过。
+阶段 3 的关键变化是主预览从 SwiftUI 合成画面切到 `MTKView`。阶段 4 新增真实 LUT texture 上传和 fragment shader LUT 采样。阶段 5 新增集中式 Rec.709 / N-Log / HLG 显示转换，以及 shader 级伪色和斑马纹。阶段 6 新增 Luma waveform 和 RGB Parade 的 Metal compute bins。你要验证的效果是：测试 target 能构建，fixtures 能生成，模拟帧源、视频文件帧源、Metal texture bridge、LUT repository、LUT pass、颜色转换、Metal shader 和 scope compute 自动化测试能全部通过。
 
 #### 方式 A：Xcode
 
@@ -289,6 +291,7 @@ xcodebuild \
 - `LUTRepositoryTests`
 - `LUTPassTests`
 - `MetalLUTShaderTests`
+- `ScopeComputePassTests`
 
 #### 方式 B：终端
 
@@ -336,7 +339,7 @@ xcodebuild \
 ** TEST EXECUTE SUCCEEDED **
 ```
 
-当前阶段 3-5 测试共有 43 个。成功时终端会逐个打印测试用例，并以 `TEST EXECUTE SUCCEEDED` 结束。
+当前阶段 3-6 测试共有 48 个。成功时终端会逐个打印测试用例，并以 `TEST EXECUTE SUCCEEDED` 结束。
 
 ### 本地真实素材
 
@@ -348,9 +351,9 @@ xcodebuild \
 - `material/NLOG.MOV`
 - `material/HLG.MOV`
 
-自动化测试不依赖这些真实素材；测试会临时生成小型 `.mov` fixture 来验证 `AVAssetReader`，使用模拟 BGRA pixel buffer 验证 Metal bridge，并使用生成的灰阶、clipping 和 float texture 输入验证阶段 5 首轮颜色转换、伪色和斑马纹。
+自动化测试不依赖这些真实素材；测试会临时生成小型 `.mov` fixture 来验证 `AVAssetReader`，使用模拟 BGRA pixel buffer 验证 Metal bridge，并使用生成的灰阶、clipping 和 float texture 输入验证阶段 5 颜色转换、伪色、斑马纹，以及阶段 6 scope compute。
 
-真实灰卡、色卡、肤色、过曝、欠曝、暗部噪声，以及参考 waveform / RGB Parade 素材仍然是后续阶段 5 和阶段 7 深度校准所需素材。请继续把这些资源放在 `material/` 下；该目录已被忽略，应只保留在本地。
+真实灰卡、色卡、肤色、过曝、欠曝、暗部噪声，以及参考 waveform / RGB Parade 素材仍然是后续阶段 5-7 深度校准所需素材。请继续把这些资源放在 `material/` 下；该目录已被忽略，应只保留在本地。
 
 ### 本地 LUT 素材
 
@@ -378,7 +381,7 @@ xcodebuild \
 
 `v0.1.3` 中 scope 面板保持约 40% 屏幕宽度，避免 waveform / RGB Parade 大面积遮挡监看画面。当相机参数调整浮层打开时，scope 面板会向上避让，避免与底部控制区域重叠。
 
-阶段 3 开始，主预览由 `MTKView` 绘制：`VideoFrame.pixelBuffer` 会通过 `CVMetalTextureCache` 桥接为 `MTLTexture`，再由 `PreviewShaders.metal` 采样到 drawable。阶段 4 会绑定 3D LUT texture，并在 fragment shader 中按 intensity 混合 LUT 输出。阶段 5 现在会把输入色彩编码和曝光辅助状态传入 shader，当前预览路径是：
+阶段 3 开始，主预览由 `MTKView` 绘制：`VideoFrame.pixelBuffer` 会通过 `CVMetalTextureCache` 桥接为 `MTLTexture`，再由 `PreviewShaders.metal` 采样到 drawable。阶段 4 会绑定 3D LUT texture，并在 fragment shader 中按 intensity 混合 LUT 输出。阶段 5 会把输入色彩编码和曝光辅助状态传入 shader。阶段 6 新增节流的 compute 旁路，读取同一份 source texture 并生成紧凑的 `ScopeData` bins，当前预览路径是：
 
 ```text
 source texture
@@ -387,9 +390,12 @@ source texture
   -> 伪色，若启用
   -> 斑马纹，若启用
   -> MTKView drawable
+  -> 旁路：ScopeComputePass，若 scope 启用
+  -> ScopeData readback
+  -> ScopePanel
 ```
 
-Scope overlay 仍是当前 SwiftUI 面板逻辑；真正的 Metal compute scope 仍是后续工作。
+Scope overlay 现在绘制 Metal compute 生成的 `ScopeData` bins。若 readback 延迟，SwiftUI 会继续显示上一份 scope 数据，同时预览渲染继续进行。
 
 ### LUT 导入
 
@@ -487,21 +493,21 @@ iPhone 17 Pro Simulator 上 app 构建、测试构建和测试执行均已成功
 
 推荐按以下顺序继续开发：
 
-1. 继续打磨 `v0.2.1` 阶段 4-5 显示路径。
+1. 继续打磨 `v0.2.1` 阶段 4-6 显示与 scope 路径。
    - 使用可选本地 Nikon / N-Log LUT 做更多真实素材验证。
    - 除非确认授权允许再分发，否则继续把本地厂商 LUT 资源留在仓库之外。
    - 决定是否根据 `FrameFormat.colorEncoding` 提供 LUT 自动建议。
-   - 等真实灰卡、色卡、肤色和参考 waveform 素材到位后，校准 N-Log / HLG、伪色和斑马纹行为。
+   - 等真实灰卡、色卡、肤色和参考 scope 素材到位后，校准 N-Log / HLG、伪色、斑马纹、waveform 和 RGB Parade 行为。
 
 2. 当管线继续增长时，把当前 preview shader 拆成更清晰的 pass 边界。
-   - 将当前 shader 逻辑提升到 `MetalFrameProcessor` 编排。
+   - 随着颜色、LUT、曝光辅助和 scope pass 继续独立，把更多编排逻辑移入 `MetalFrameProcessor`。
    - 保持颜色转换作为唯一输入解释入口。
    - 保持伪色和斑马纹只影响监看显示。
 
-3. 实现真实 scope 分析。
-   - 对帧做降采样。
-   - 根据像素值生成 Luma waveform。
-   - 根据 RGB 通道值生成 RGB Parade。
+3. 深化 scope 验证。
+   - 为更重的真实素材增加降采样选项。
+   - 将 Luma waveform 和 RGB Parade 与参考截图对比。
+   - 在 iPhone 12 Pro 真机上微调 bin 尺寸和分析间隔。
    - 增加隔帧分析，保护模拟器和 iPhone 12 Pro 性能。
 
 4. 随每个渲染切片继续扩展测试。
