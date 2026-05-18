@@ -67,7 +67,7 @@ final class MetalLUTShaderTests: XCTestCase {
         XCTAssertEqual(fullMix.z, 0, accuracy: 0.02)
     }
 
-    func testPreviewShaderTransformsNLogBeforeDisplay() throws {
+    func testPreviewShaderLeavesNLogRawWhenLUTDisabled() throws {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw XCTSkip("Metal is not available in this test environment")
         }
@@ -85,12 +85,67 @@ final class MetalLUTShaderTests: XCTestCase {
             sourceColor: SIMD3<Float>(repeating: 0.36366777),
             lutResource: lutResource,
             intensity: 0,
+            colorEncoding: .nLog,
+            lutEnabled: false
+        )
+
+        XCTAssertEqual(output.x, 0.36366777, accuracy: 0.02)
+        XCTAssertEqual(output.y, 0.36366777, accuracy: 0.02)
+        XCTAssertEqual(output.z, 0.36366777, accuracy: 0.02)
+    }
+
+    func testPreviewShaderSamplesNLogLUTWithRawInput() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw XCTSkip("Metal is not available in this test environment")
+        }
+
+        guard let commandQueue = device.makeCommandQueue(),
+              let pipelineState = try makePipelineState(device: device) else {
+            throw XCTSkip("Unable to create Metal pipeline")
+        }
+
+        let parsed = try LUTParser().parse(CubeFixtureFactory.redChannelRamp(size: 2))
+        let lutResource = try LUTPass(device: device).makeTextureResource(from: parsed)
+        let output = try render(
+            device: device,
+            commandQueue: commandQueue,
+            pipelineState: pipelineState,
+            sourceColor: SIMD3<Float>(repeating: 0.7),
+            lutResource: lutResource,
+            intensity: 1,
             colorEncoding: .nLog
         )
 
-        XCTAssertEqual(output.x, 0.18, accuracy: 0.02)
-        XCTAssertEqual(output.y, 0.18, accuracy: 0.02)
-        XCTAssertEqual(output.z, 0.18, accuracy: 0.02)
+        XCTAssertEqual(output.x, 0.7, accuracy: 0.03)
+        XCTAssertEqual(output.y, 0, accuracy: 0.02)
+        XCTAssertEqual(output.z, 0, accuracy: 0.02)
+    }
+
+    func testPreviewShaderMixesNLogRawInputWithLUTOutput() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw XCTSkip("Metal is not available in this test environment")
+        }
+
+        guard let commandQueue = device.makeCommandQueue(),
+              let pipelineState = try makePipelineState(device: device) else {
+            throw XCTSkip("Unable to create Metal pipeline")
+        }
+
+        let parsed = try LUTParser().parse(CubeFixtureFactory.redChannelRamp(size: 2))
+        let lutResource = try LUTPass(device: device).makeTextureResource(from: parsed)
+        let output = try render(
+            device: device,
+            commandQueue: commandQueue,
+            pipelineState: pipelineState,
+            sourceColor: SIMD3<Float>(repeating: 0.7),
+            lutResource: lutResource,
+            intensity: 0.5,
+            colorEncoding: .nLog
+        )
+
+        XCTAssertEqual(output.x, 0.7, accuracy: 0.03)
+        XCTAssertEqual(output.y, 0.35, accuracy: 0.03)
+        XCTAssertEqual(output.z, 0.35, accuracy: 0.03)
     }
 
     func testPreviewShaderMapsGeneratedGrayRampToFalseColorBand() throws {
@@ -159,6 +214,120 @@ final class MetalLUTShaderTests: XCTestCase {
         XCTAssertGreaterThan(aboveThreshold.z, 0.98)
     }
 
+    func testPreviewShaderZebraUsesRawAnalysisSourceWhenSelected() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw XCTSkip("Metal is not available in this test environment")
+        }
+
+        guard let commandQueue = device.makeCommandQueue(),
+              let pipelineState = try makePipelineState(device: device) else {
+            throw XCTSkip("Unable to create Metal pipeline")
+        }
+
+        let parsed = try LUTParser().parse(CubeFixtureFactory.redChannelRamp(size: 2))
+        let lutResource = try LUTPass(device: device).makeTextureResource(from: parsed)
+        let output = try render(
+            device: device,
+            commandQueue: commandQueue,
+            pipelineState: pipelineState,
+            sourceColor: SIMD3<Float>(repeating: 0.8),
+            lutResource: lutResource,
+            intensity: 1,
+            zebraEnabled: true,
+            zebraThreshold: 0.75,
+            analysisSource: .rawSignal
+        )
+
+        XCTAssertGreaterThan(output.x, 0.98)
+        XCTAssertGreaterThan(output.y, 0.98)
+        XCTAssertGreaterThan(output.z, 0.98)
+    }
+
+    func testPreviewShaderZebraUsesPreviewAnalysisSourceWhenSelected() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw XCTSkip("Metal is not available in this test environment")
+        }
+
+        guard let commandQueue = device.makeCommandQueue(),
+              let pipelineState = try makePipelineState(device: device) else {
+            throw XCTSkip("Unable to create Metal pipeline")
+        }
+
+        let parsed = try LUTParser().parse(CubeFixtureFactory.redChannelRamp(size: 2))
+        let lutResource = try LUTPass(device: device).makeTextureResource(from: parsed)
+        let output = try render(
+            device: device,
+            commandQueue: commandQueue,
+            pipelineState: pipelineState,
+            sourceColor: SIMD3<Float>(repeating: 0.8),
+            lutResource: lutResource,
+            intensity: 1,
+            zebraEnabled: true,
+            zebraThreshold: 0.75,
+            analysisSource: .previewDisplay
+        )
+
+        XCTAssertEqual(output.x, 0.8, accuracy: 0.03)
+        XCTAssertEqual(output.y, 0, accuracy: 0.02)
+        XCTAssertEqual(output.z, 0, accuracy: 0.02)
+    }
+
+    func testPreviewShaderFalseColorUsesRawAnalysisSourceWhenSelected() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw XCTSkip("Metal is not available in this test environment")
+        }
+
+        guard let commandQueue = device.makeCommandQueue(),
+              let pipelineState = try makePipelineState(device: device) else {
+            throw XCTSkip("Unable to create Metal pipeline")
+        }
+
+        let parsed = try LUTParser().parse(CubeFixtureFactory.redChannelRamp(size: 2))
+        let lutResource = try LUTPass(device: device).makeTextureResource(from: parsed)
+        let output = try render(
+            device: device,
+            commandQueue: commandQueue,
+            pipelineState: pipelineState,
+            sourceColor: SIMD3<Float>(repeating: 0.8),
+            lutResource: lutResource,
+            intensity: 1,
+            falseColorEnabled: true,
+            analysisSource: .rawSignal
+        )
+
+        XCTAssertEqual(output.x, 0.88, accuracy: 0.03)
+        XCTAssertEqual(output.y, 0.88, accuracy: 0.03)
+        XCTAssertEqual(output.z, 0.22, accuracy: 0.03)
+    }
+
+    func testPreviewShaderFalseColorUsesPreviewAnalysisSourceWhenSelected() throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw XCTSkip("Metal is not available in this test environment")
+        }
+
+        guard let commandQueue = device.makeCommandQueue(),
+              let pipelineState = try makePipelineState(device: device) else {
+            throw XCTSkip("Unable to create Metal pipeline")
+        }
+
+        let parsed = try LUTParser().parse(CubeFixtureFactory.redChannelRamp(size: 2))
+        let lutResource = try LUTPass(device: device).makeTextureResource(from: parsed)
+        let output = try render(
+            device: device,
+            commandQueue: commandQueue,
+            pipelineState: pipelineState,
+            sourceColor: SIMD3<Float>(repeating: 0.8),
+            lutResource: lutResource,
+            intensity: 1,
+            falseColorEnabled: true,
+            analysisSource: .previewDisplay
+        )
+
+        XCTAssertEqual(output.x, 0.48, accuracy: 0.03)
+        XCTAssertEqual(output.y, 0.48, accuracy: 0.03)
+        XCTAssertEqual(output.z, 0.48, accuracy: 0.03)
+    }
+
     private func render(
         device: MTLDevice,
         commandQueue: MTLCommandQueue,
@@ -167,10 +336,12 @@ final class MetalLUTShaderTests: XCTestCase {
         lutResource: LUTTextureResource,
         intensity: Float,
         colorEncoding: SourceColorEncoding = .rec709,
+        lutEnabled: Bool = true,
         falseColorEnabled: Bool = false,
         zebraEnabled: Bool = false,
         zebraThreshold: Float = 0.9,
-        zebraMode: Float = 0
+        zebraMode: Float = 0,
+        analysisSource: ExposureAnalysisSource = .rawSignal
     ) throws -> SIMD3<Float> {
         let sourceTexture = makeTexture2D(device: device, pixelFormat: .rgba32Float, usage: [.shaderRead])
         var sourcePixel: [Float] = [sourceColor.x, sourceColor.y, sourceColor.z, 1]
@@ -203,7 +374,7 @@ final class MetalLUTShaderTests: XCTestCase {
         let samplerState = device.makeSamplerState(descriptor: samplerDescriptor)
 
         var uniforms = [
-            SIMD4<Float>(1, intensity, Float(lutResource.cubeSize), 0),
+            SIMD4<Float>(lutEnabled ? 1 : 0, intensity, Float(lutResource.cubeSize), 0),
             SIMD4<Float>(lutResource.domainMin.x, lutResource.domainMin.y, lutResource.domainMin.z, 0),
             SIMD4<Float>(lutResource.domainMax.x, lutResource.domainMax.y, lutResource.domainMax.z, 0)
         ]
@@ -214,7 +385,7 @@ final class MetalLUTShaderTests: XCTestCase {
                 zebraEnabled ? 1 : 0,
                 zebraMode
             ),
-            SIMD4<Float>(zebraThreshold, 0.4, 0.6, 0)
+            SIMD4<Float>(zebraThreshold, 0.4, 0.6, analysisSourceCode(for: analysisSource))
         ]
 
         renderEncoder.setRenderPipelineState(pipelineState)
@@ -245,6 +416,15 @@ final class MetalLUTShaderTests: XCTestCase {
         }
 
         return SIMD3<Float>(outputPixel[0], outputPixel[1], outputPixel[2])
+    }
+
+    private func analysisSourceCode(for source: ExposureAnalysisSource) -> Float {
+        switch source {
+        case .rawSignal:
+            return 0
+        case .previewDisplay:
+            return 1
+        }
     }
 
     private func makePipelineState(device: MTLDevice) throws -> MTLRenderPipelineState? {

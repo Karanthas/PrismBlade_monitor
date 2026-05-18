@@ -3,6 +3,7 @@ import SwiftUI
 struct ScopePanel: View {
     var mode: ScopeMode
     var opacity: Double
+    var analysisSource: ExposureAnalysisSource
     var data: ScopeData?
 
     var body: some View {
@@ -11,7 +12,7 @@ struct ScopePanel: View {
                 Text(mode.title)
                     .font(.caption.weight(.bold))
                 Spacer()
-                Text("显示链路采样")
+                Text(analysisSource.compactTitle)
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.68))
             }

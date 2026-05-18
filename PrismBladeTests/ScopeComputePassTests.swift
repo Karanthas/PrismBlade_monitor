@@ -163,7 +163,7 @@ final class ScopeComputePassTests: XCTestCase {
         wait(for: [expectation], timeout: 2)
     }
 
-    func testScopeSamplesLUTPreviewResultWhenEnabled() throws {
+    func testScopeRawAnalysisSamplesNLogRawSignalWhenLUTEnabled() throws {
         let environment = try makeEnvironment()
         let texture = try makeTexture(
             device: environment.device,
@@ -181,8 +181,37 @@ final class ScopeComputePassTests: XCTestCase {
         let data = try encodeScope(
             pass: pass,
             texture: texture,
-            frame: try makeFrame(sequence: 6),
-            monitor: makeMonitor(scopeMode: .lumaWaveform),
+            frame: try makeFrame(sequence: 6, colorEncoding: .nLog),
+            monitor: makeMonitor(scopeMode: .lumaWaveform, analysisSource: .rawSignal),
+            commandQueue: environment.commandQueue,
+            lutResource: lutResource,
+            lutEnabled: true
+        )
+
+        XCTAssertGreaterThan(data.lumaBins[index(column: 0, row: 2, binHeight: 4)], 0.9)
+        XCTAssertEqual(data.lumaBins[index(column: 0, row: 0, binHeight: 4)], 0, accuracy: 0.01)
+    }
+
+    func testScopePreviewAnalysisSamplesLUTPreviewResultWhenEnabled() throws {
+        let environment = try makeEnvironment()
+        let texture = try makeTexture(
+            device: environment.device,
+            width: 1,
+            height: 1,
+            pixels: [SIMD4<Float>(0.5, 0.5, 0.5, 1)]
+        )
+        let pass = try ScopeComputePass(
+            device: environment.device,
+            library: environment.library,
+            configuration: ScopeComputePass.Configuration(binWidth: 1, binHeight: 4, frameInterval: 1)
+        )
+        let parsed = try LUTParser().parse(CubeFixtureFactory.redChannelRamp(size: 2))
+        let lutResource = try LUTPass(device: environment.device).makeTextureResource(from: parsed)
+        let data = try encodeScope(
+            pass: pass,
+            texture: texture,
+            frame: try makeFrame(sequence: 7, colorEncoding: .nLog),
+            monitor: makeMonitor(scopeMode: .lumaWaveform, analysisSource: .previewDisplay),
             commandQueue: environment.commandQueue,
             lutResource: lutResource,
             lutEnabled: true
@@ -308,11 +337,14 @@ final class ScopeComputePassTests: XCTestCase {
         return texture
     }
 
-    private func makeFrame(sequence: Int) throws -> VideoFrame {
+    private func makeFrame(
+        sequence: Int,
+        colorEncoding: SourceColorEncoding = .rec709
+    ) throws -> VideoFrame {
         let format = FrameFormat(
             resolution: CGSize(width: 1, height: 1),
             frameRate: 30,
-            colorEncoding: .rec709
+            colorEncoding: colorEncoding
         )
 
         return VideoFrame(
@@ -328,9 +360,13 @@ final class ScopeComputePassTests: XCTestCase {
         )
     }
 
-    private func makeMonitor(scopeMode: ScopeMode) -> MonitorState {
+    private func makeMonitor(
+        scopeMode: ScopeMode,
+        analysisSource: ExposureAnalysisSource = .rawSignal
+    ) -> MonitorState {
         var monitor = MonitorState.initial
         monitor.scopeMode = scopeMode
+        monitor.exposureAnalysisSource = analysisSource
         return monitor
     }
 

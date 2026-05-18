@@ -167,7 +167,7 @@ final class MetalFrameProcessor {
                 ZebraPass.thresholdFraction(for: monitor),
                 0.4,
                 0.6,
-                0
+                ExposureAnalysisPass.sourceCode(for: monitor.exposureAnalysisSource)
             )
         ]
     }
@@ -176,4 +176,15 @@ final class MetalFrameProcessor {
 private struct LUTRenderState {
     var resource: LUTTextureResource
     var isApplied: Bool
+}
+
+private enum ExposureAnalysisPass {
+    static func sourceCode(for source: ExposureAnalysisSource) -> Float {
+        switch source {
+        case .rawSignal:
+            return 0
+        case .previewDisplay:
+            return 1
+        }
+    }
 }

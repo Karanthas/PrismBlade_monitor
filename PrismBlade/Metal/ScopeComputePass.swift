@@ -137,7 +137,7 @@ final class ScopeComputePass {
                 Float(configuration.binWidth),
                 Float(configuration.binHeight),
                 ColorTransformPass.encodingCode(for: frame.format.colorEncoding),
-                0
+                exposureAnalysisSourceCode(for: monitor.exposureAnalysisSource)
             ),
             SIMD4<Float>(
                 Float(sourceTexture.width),
@@ -242,5 +242,14 @@ final class ScopeComputePass {
 
         let scale = Float(maximum)
         return values.map { Float($0) / scale }
+    }
+
+    private func exposureAnalysisSourceCode(for source: ExposureAnalysisSource) -> Float {
+        switch source {
+        case .rawSignal:
+            return 0
+        case .previewDisplay:
+            return 1
+        }
     }
 }

@@ -43,6 +43,7 @@ struct MonitorScreen: View {
                             ScopePanel(
                                 mode: session.state.monitor.scopeMode,
                                 opacity: session.state.monitor.scopeOpacity,
+                                analysisSource: session.state.monitor.exposureAnalysisSource,
                                 data: session.scopeData
                             )
                             .frame(width: scopeWidth, height: usePortraitLayout ? 118 : 132)
@@ -91,9 +92,9 @@ struct MonitorScreen: View {
 
             if isNLogInput {
                 if isNLogLUTPreviewActive {
-                    Text("N-Log LUT \(session.state.lut.selectedLUT?.title ?? "On")")
+                    Text("N-Log LUT · \(session.state.monitor.exposureAnalysisSource.compactTitle) Scope")
                 } else {
-                    Text("N-Log LUT Off")
+                    Text("N-Log Raw")
                 }
             }
 

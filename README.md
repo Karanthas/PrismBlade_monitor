@@ -1,12 +1,12 @@
 # PrismBlade
 
-**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch is moving through the `v0.2.1` Metal-first plan. Stages 3-6 now have a working vertical slice: the project has a real `CVPixelBuffer` media frame model, a BGRA simulated frame source, an `AVAssetReader` video-file frame source, a `CVPixelBuffer -> MTLTexture -> MTKView drawable` Metal preview loop, display-only 3D LUT sampling, centralized Rec.709 / N-Log / HLG display-space conversion, shader-based false color / zebra exposure assists, and Metal compute scope bins for Luma waveform / RGB Parade.
+**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch has moved from the `v0.2.1` Metal-first vertical slice into the `v0.2.2` N-Log / LUT exposure-chain correction. The project now has a real `CVPixelBuffer` media frame model, a BGRA simulated frame source, an `AVAssetReader` video-file frame source, a `CVPixelBuffer -> MTLTexture -> MTKView drawable` Metal preview loop, display-only 3D LUT sampling, explicit raw / preview / analysis signal separation, shader-based false color / zebra exposure assists, and Metal compute scope bins for Luma waveform / RGB Parade.
 
 > Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
 ## Status
 
-This repository currently contains a simulator-ready SwiftUI prototype plus the `v0.2.1` Stage 3 Metal preview loop, Stage 4 LUT rendering path, Stage 5 color-conversion / exposure-assist slice, and Stage 6 Metal compute scope path. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
+This repository currently contains a simulator-ready SwiftUI prototype plus the `v0.2.1` Stage 3 Metal preview loop, Stage 4 LUT rendering path, Stage 5 exposure-assist slice, Stage 6 Metal compute scope path, and the `v0.2.2` N-Log LUT input / exposure-analysis-source correction. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
 
 The app is intentionally built around replaceable boundaries:
 
@@ -18,8 +18,8 @@ The app is intentionally built around replaceable boundaries:
 - `MetalPreviewSurface` wraps `MTKView` with `UIViewRepresentable` and reconnects the Metal surface to the SwiftUI monitor screen.
 - `LUTStore` and `LUTRepository` load imported LUTs and optional local `.cube` resources without requiring redistributable vendor LUTs in the repository.
 - `LUTPass` uploads parsed `.cube` data into a 3D Metal texture and caches texture resources per LUT descriptor.
-- `ColorTransformPass`, `FalseColorPass`, and `ZebraPass` provide the Swift-side state mapping for the Stage 5 shader uniforms.
-- `MetalFrameProcessor` and `ScopeComputePass` run throttled Metal compute analysis and read back compact `ScopeData` bins for the SwiftUI scope panel.
+- `ColorTransformPass`, `FalseColorPass`, `ZebraPass`, and `ExposureAnalysisSource` provide the Swift-side state mapping for shader uniforms.
+- `MetalFrameProcessor` and `ScopeComputePass` keep raw input, preview display, and exposure-analysis signals explicit, then read back compact `ScopeData` bins for the SwiftUI scope panel.
 - `CameraTransport` owns camera communication and can later be replaced by ImageCaptureCore, PTP, or a network bridge.
 - `CameraCommandService` validates camera writes before they reach the transport layer.
 - LUT parsing and repository logic are separate from the monitor UI.
@@ -35,19 +35,20 @@ The app is intentionally built around replaceable boundaries:
 - Initial color-encoding detection through explicit hints, `REC709` / `NLOG` / `HLG` filename conventions, and video metadata markers.
 - Metal texture bridging from BGRA `CVPixelBuffer` to `.bgra8Unorm` `MTLTexture`.
 - Metal main preview rendering with `MTLDevice`, `MTLCommandQueue`, a minimal render pipeline, and `PreviewShaders.metal`.
-- Display-space conversion in the Metal preview shader for Rec.709, N-Log, and HLG inputs.
+- Raw-signal-first preview shader for Rec.709, N-Log, and HLG inputs. N-Log is no longer automatically decoded into a display working space before LUT sampling.
 - Rec.709 input displays directly by default; N-Log input exposes a monitor-side LUT Preview button that applies the selected `.cube` LUT only when enabled.
-- Display-only 3D LUT application in the Metal preview shader, with working-space/LUT output mixed by LUT intensity.
-- Shader-based false color using converted display-space luma.
-- Shader-based high zebra and range zebra masks using converted display-space luma and the settings threshold.
-- Metal compute Luma waveform and RGB Parade scope bins, displayed by `ScopePanel` instead of generated placeholder curves; scope analysis follows the color-converted and N-Log LUT-previewed image by default, excluding false-color / zebra overlays.
+- Display-only 3D LUT application in the Metal preview shader, with raw input / LUT output mixed by LUT intensity. Nikon N-Log -> Rec.709 LUTs are sampled with the original N-Log code values.
+- Explicit exposure analysis source: `Raw Signal` or `Preview Display`, defaulting to `Raw Signal`.
+- Shader-based false color using the selected analysis signal.
+- Shader-based high zebra and range zebra masks using the selected analysis signal and the settings threshold.
+- Metal compute Luma waveform and RGB Parade scope bins, displayed by `ScopePanel` instead of generated placeholder curves; scope analysis follows the selected raw or preview analysis source and excludes false-color / zebra overlays.
 - Scope compute dispatch uses explicit threadgroup-grid sizing instead of `dispatchThreads`, improving compatibility across iOS Simulator and different Metal GPU families while preserving the same sampled pixels.
-- `MetalFrameProcessor` centralizes LUT preview resolution, shader uniform generation, and the shared display state used by scope compute.
+- `MetalFrameProcessor` centralizes LUT preview resolution, shader uniform generation, and the raw / preview / analysis state used by scope compute.
 - `LUTPass` conversion from parsed `.cube` entries to `.rgba32Float` 3D `MTLTexture` resources.
 - Identity fallback LUT resource so the renderer can keep drawing when no LUT is enabled or a selected LUT cannot be resolved.
 - SwiftUI / Metal integration through an `MTKView` wrapped in `UIViewRepresentable`, replacing the SwiftUI gradient placeholder as the main preview.
 - Minimal Metal viewport scaling for fit, fill, 1x, and 2x.
-- Top status bar for connection state, input format, frame rate, LUT state, exposure tools, battery, and storage placeholders.
+- Top status bar for connection state, input format, frame rate, N-Log raw/LUT state, exposure-analysis source, exposure tools, battery, and storage placeholders.
 - Left and right floating tool rails.
 - False color toggle wired to the Metal preview shader.
 - Zebra toggle with threshold settings wired to the Metal preview shader.
@@ -70,7 +71,7 @@ The app is intentionally built around replaceable boundaries:
 - `.cube` parser with validation for `TITLE`, `LUT_3D_SIZE`, `DOMAIN_MIN`, `DOMAIN_MAX`, comments, and RGB data rows.
 - Optional local LUT directory support through `PrismBlade/Resources/LUTs`; ignored vendor LUT files are shown only when present and parseable.
 - LUT metadata persistence through a JSON index in the app documents directory.
-- Settings screen with portrait-monitoring permission, false-color / zebra default-on preferences, zebra threshold, scope opacity, scope mode, and mock debug actions.
+- Settings screen with portrait-monitoring permission, false-color / zebra default-on preferences, zebra threshold, scope opacity, scope mode, exposure analysis source, and mock debug actions.
 - Mock Nikon Z6III camera controls:
   - Exposure mode
   - Aperture
@@ -81,7 +82,7 @@ The app is intentionally built around replaceable boundaries:
   - Record toggle
   - Capture action
   - Focus action
-- XCTest target for `v0.2.1` Stages 1-6:
+- XCTest target for `v0.2.1` Stages 1-6 plus `v0.2.2` exposure-chain regression coverage:
   - Pixel buffer fixture generation for small BGRA test images.
   - `.cube` fixture generation for valid and invalid LUT cases.
   - CPU reference helpers for luma, LUT sampling, zebra masks, and waveform bins.
@@ -93,8 +94,8 @@ The app is intentionally built around replaceable boundaries:
   - `LUTRepository` tests for optional local LUT discovery and imported LUT reload.
   - `LUTPass` tests for 3D texture upload order, domain preservation, and texture format.
   - `ColorTransformPass` reference tests for generated Rec.709 / N-Log / HLG inputs.
-  - `MetalLUTShaderTests` offscreen-render coverage for LUT intensity blending, N-Log display conversion, generated gray-ramp false color, and zebra threshold behavior.
-  - `ScopeComputePassTests` coverage for waveform / RGB Parade bins, readback throttling, and LUT-previewed scope analysis.
+  - `MetalLUTShaderTests` offscreen-render coverage for LUT intensity blending, N-Log raw output when LUT is disabled, raw N-Log LUT sampling, raw/LUT-output mixing, generated gray-ramp false color, and raw/preview zebra and false-color analysis behavior.
+  - `ScopeComputePassTests` coverage for waveform / RGB Parade bins, readback throttling, raw N-Log scope analysis, and preview-display scope analysis.
 
 ## What Is Not Implemented Yet
 
@@ -267,9 +268,9 @@ Expected result:
 ** BUILD SUCCEEDED **
 ```
 
-### Run Stage 3-6 Tests
+### Run Stage 3-6 and v0.2.2 Tests
 
-Stage 3 moves the main preview from SwiftUI synthetic drawing to an `MTKView`. Stage 4 adds real LUT texture upload and fragment-shader LUT sampling. Stage 5 adds centralized Rec.709 / N-Log / HLG display conversion plus shader-based false color and zebra. Stage 6 adds Metal compute bins for Luma waveform and RGB Parade. The effect you should verify is that the test target builds and the simulated frame source, video-file frame source, Metal texture bridge, LUT repository, LUT pass, color transform, Metal shader, and scope compute tests pass.
+Stage 3 moves the main preview from SwiftUI synthetic drawing to an `MTKView`. Stage 4 adds real LUT texture upload and fragment-shader LUT sampling. Stage 5 adds shader-based false color and zebra. Stage 6 adds Metal compute bins for Luma waveform and RGB Parade. The `v0.2.2` correction keeps N-Log LUT sampling on the raw input signal and lets exposure tools analyze either Raw Signal or Preview Display. The effect you should verify is that the test target builds and the simulated frame source, video-file frame source, Metal texture bridge, LUT repository, LUT pass, Metal shader, exposure analysis, and scope compute tests pass.
 
 #### Option A: Xcode
 
@@ -340,7 +341,7 @@ Expected result:
 ** TEST EXECUTE SUCCEEDED **
 ```
 
-The current Stage 3-6 suite contains 49 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
+The current suite contains 58 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
 
 ### Local Real Materials
 
@@ -359,11 +360,11 @@ For local manual testing, duplicate an Xcode scheme locally, for example `PrismB
 /Users/chronus/code/diy/monitor/material/NLOG.MOV
 ```
 
-When `AppEnvironment` sees `-PBLocalVideoPath`, it temporarily injects `VideoFileFrameSource` so local real materials can be used to validate LUTs, false color, zebra, and scopes before real camera communication exists. This is a local testing hook only; it should not become a user-visible video-source switch. Once the real camera `FrameSource` is implemented, remove this launch-argument hook or route the default path back to the camera source.
+When `AppEnvironment` sees `-PBLocalVideoPath`, it temporarily injects `VideoFileFrameSource` so local real materials can be used to validate N-Log raw display, N-Log LUT preview, false color, zebra, and scopes before real camera communication exists. This is a local testing hook only; it should not become a user-visible video-source switch. Once the real camera `FrameSource` is implemented, remove this launch-argument hook or route the default path back to the camera source.
 
-Automated tests do not depend on those real materials. Tests generate small temporary `.mov` fixtures to verify `AVAssetReader`, use simulated BGRA pixel buffers to verify Metal bridging, and use generated gray / clipping / float-texture inputs for Stage 5 color-conversion, false-color, zebra, and Stage 6 scope compute checks.
+Automated tests do not depend on those real materials. Tests generate small temporary `.mov` fixtures to verify `AVAssetReader`, use simulated BGRA pixel buffers to verify Metal bridging, and use generated gray / clipping / float-texture inputs for false-color, zebra, raw N-Log LUT sampling, and scope compute checks.
 
-Real gray-card, color-chart, skin-tone, overexposure, underexposure, dark-noise, and reference waveform / RGB Parade materials are still needed for deeper Stage 5-7 calibration. Keep those assets in `material/`; the directory is ignored and should remain local.
+Real gray-card, color-chart, skin-tone, overexposure, underexposure, dark-noise, and reference waveform / RGB Parade materials are still needed for deeper calibration. Keep those assets in `material/`; the directory is ignored and should remain local.
 
 ### Local LUT Materials
 
@@ -391,16 +392,19 @@ Use the floating tool buttons to toggle monitor assists:
 
 The scope panel is intentionally compact in `v0.1.3`: waveform and RGB Parade use about 40% of the screen width so they do not dominate the monitored image. When the camera parameter adjustment panel is open, the scope panel moves upward to avoid overlapping the bottom controls.
 
-Starting in Stage 3, the main preview is drawn by `MTKView`: `VideoFrame.pixelBuffer` is bridged through `CVMetalTextureCache` into `MTLTexture`, then sampled by `PreviewShaders.metal` into the drawable. Stage 4 binds a 3D LUT texture and mixes LUT output by intensity in the fragment shader. Stage 5 sends the input color encoding and exposure-assist state into the shader. Stage 6 adds a throttled compute side path that reads the same source texture and produces compact `ScopeData` bins. `MetalFrameProcessor` now centralizes display-state decisions: Rec.709 displays directly, while N-Log applies the selected LUT only when LUT Preview is enabled.
+Starting in Stage 3, the main preview is drawn by `MTKView`: `VideoFrame.pixelBuffer` is bridged through `CVMetalTextureCache` into `MTLTexture`, then sampled by `PreviewShaders.metal` into the drawable. Stage 4 binds a 3D LUT texture and mixes LUT output by intensity in the fragment shader. Stage 5 sends exposure-assist state into the shader. Stage 6 adds a throttled compute side path that reads the same source texture and produces compact `ScopeData` bins. `v0.2.2` removes the old implicit “decode N-Log before LUT” path: Rec.709 displays directly, N-Log LUT Preview samples raw N-Log code values, and exposure tools explicitly analyze either Raw Signal or Preview Display.
 
 ```text
 source texture
-  -> Rec.709 / N-Log / HLG display conversion
-  -> N-Log LUT Preview, if enabled and a LUT is selected
-  -> false color, if enabled
-  -> zebra, if enabled
+  -> rawInputColor
+  -> previewColor:
+       raw input, or raw input mixed with LUT output when LUT Preview is enabled
+  -> analysisColor:
+       Raw Signal or Preview Display
+  -> false color, if enabled, based on analysisColor
+  -> zebra, if enabled, based on analysisColor
   -> MTKView drawable
-  -> side path: ScopeComputePass, if scope is enabled, analyzing color-converted and LUT-previewed output
+  -> side path: ScopeComputePass, if scope is enabled, analyzing analysisColor
   -> ScopeData readback
   -> ScopePanel
 ```
@@ -418,7 +422,7 @@ The scope overlay now draws `ScopeData` bins from Metal compute. If readback is 
 5. Select the imported LUT from the list.
 6. Enable LUT and adjust intensity.
 
-Current LUT imports are parsed, validated, cached through `LUTStore`, uploaded to Metal as 3D textures through `LUTPass`, and sampled by the preview fragment shader when LUT is enabled. The pass is display-only and does not alter the original `CVPixelBuffer`.
+Current LUT imports are parsed, validated, cached through `LUTStore`, uploaded to Metal as 3D textures through `LUTPass`, and sampled by the preview fragment shader when LUT is enabled. The pass is display-only and does not alter the original `CVPixelBuffer`. In `v0.2.2`, selected LUTs are sampled from the raw input signal; this keeps Nikon N-Log -> Rec.709 technical LUTs from receiving already-decoded N-Log values.
 
 ### Mock Camera Controls
 
@@ -476,8 +480,9 @@ Important implementation decisions are documented with inline comments in the Sw
 - Why LUT preview tint remains metadata while real LUT rendering uses parsed `.cube` entries.
 - Why optional local vendor LUT files are discovered at runtime rather than hard-coded as always-visible built-ins.
 - Why `LUTPass` uses a fallback identity resource when LUT rendering is disabled or unavailable.
-- Why color conversion is centralized before LUT, false color, zebra, and future scope analysis.
-- Why generated gray / clipping inputs are enough for Stage 5 automation but do not replace real Nikon calibration materials.
+- Why N-Log LUT preview samples raw input code values rather than an automatically decoded display-space value.
+- Why exposure analysis can use Raw Signal or Preview Display, and why Raw Signal is the default.
+- Why generated gray / clipping inputs are enough for automated shader checks but do not replace real Nikon calibration materials.
 - Why the scope overlay is constrained to 40% width.
 - Why the scope overlay uses dynamic bottom avoidance when the parameter adjustment panel is open.
 - Why scope compute uses explicit `dispatchThreadgroups` sizing for simulator and GPU-family compatibility.
@@ -492,29 +497,31 @@ The current code has been checked with:
 plutil -lint PrismBlade.xcodeproj/project.pbxproj PrismBlade/Info.plist
 ```
 
-And built and tested with:
+And checked with:
 
 ```sh
 /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild build ...
 /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild build-for-testing ...
-/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building ...
 ```
 
-The app build, simulator test build, and test execution succeeded on an iPhone 17 Pro Simulator. The normal `.metal` compilation path depends on the installed Metal Toolchain. In restricted shells, Xcode may not see the cryptex-mounted Metal Toolchain or may print CoreSimulator logging permission warnings; run from Terminal or Xcode directly if the sandbox cannot access the Metal Toolchain, CoreSimulator, or `testmanagerd`.
+The app build and simulator test build succeeded. Full XCTest execution requires a concrete simulator and working CoreSimulator / `testmanagerd` services. The normal `.metal` compilation path depends on the installed Metal Toolchain. In restricted shells, Xcode may not see the cryptex-mounted Metal Toolchain or may print CoreSimulator logging permission warnings; run from Terminal or Xcode directly if the sandbox cannot access the Metal Toolchain, CoreSimulator, or `testmanagerd`.
 
 ## Next Steps
 
 Recommended next development steps:
 
-1. Move into `v0.2.1` Stage 7 integration validation.
-   - Add more real-material validation with optional local Nikon / N-Log LUTs.
+1. Validate the `v0.2.2` N-Log / LUT exposure-chain correction with real material.
+   - Compare `material/NLOG.MOV` with optional local Nikon / N-Log LUTs.
+   - Confirm LUT Off shows flat N-Log rather than an app-generated Rec.709 conversion.
+   - Confirm LUT On samples raw N-Log code values and keeps highlight detail from being clipped before LUT sampling.
    - Keep local vendor LUT assets out of the repository unless redistribution is confirmed.
    - Calibrate N-Log / HLG, false color, zebra, waveform, and RGB Parade behavior after real gray-card, color-chart, skin-tone, and reference scope materials arrive.
 
-2. Preserve the current display policy.
+2. Preserve the current analysis policy.
    - Rec.709 input displays directly and does not auto-apply LUTs.
    - N-Log input uses the monitor-side N-Log LUT Preview button for the selected LUT.
-   - False color and zebra remain display-only overlays and are excluded from scope analysis.
+   - Raw Signal remains the default exposure analysis source.
+   - Preview Display remains available for checking LUT-output waveform / zebra / false-color behavior.
 
 3. Deepen scope validation.
    - Add reduced-resolution sampling options for heavier real footage.
@@ -540,6 +547,7 @@ Recommended next development steps:
 ## Reference Documents
 
 - [Prototype Design](PROTOTYPE_DESIGN.md)
+- [Technical Spec v0.2.2](TECHNICAL_SPEC_v0.2.2.md)
 - [Technical Spec v0.2.1](TECHNICAL_SPEC_v0.2.1.md)
 - [Test Plan v0.2.1](TEST_PLAN_v0.2.1.md)
 - [Technical Spec v0.1.3](TECHNICAL_SPEC_v0.1.3.md)

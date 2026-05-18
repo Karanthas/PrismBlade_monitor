@@ -29,8 +29,9 @@ vertex PreviewVertexOut previewVertex(uint vertexID [[vertex_id]]) {
 
 float nlogDecode(float x);
 float hlgDecode(float x);
-float3 transformToWorkingSpace(float3 color, float encodingCode);
-float3 applyDisplayLUT(float3 workingColor, texture3d<float, access::sample> lutTexture, sampler lutSampler, constant float4 *lutUniforms);
+float3 experimentalDisplayTransform(float3 color, float encodingCode);
+float3 applyDisplayLUT(float3 rawInputColor, texture3d<float, access::sample> lutTexture, sampler lutSampler, constant float4 *lutUniforms);
+float3 analysisColorForSource(float3 rawInputColor, float3 previewColor, float analysisSourceCode);
 float rec709Luma(float3 color);
 float3 falseColor(float luma);
 bool zebraApplies(float luma, constant float4 *monitorUniforms);
@@ -47,10 +48,12 @@ fragment float4 previewFragment(
     constant float4 *monitorUniforms [[buffer(1)]]
 ) {
     const float4 sourceColor = sourceTexture.sample(sourceSampler, in.textureCoordinate);
-    const float3 workingColor = transformToWorkingSpace(sourceColor.rgb, monitorUniforms[0].x);
-    float3 displayColor = applyDisplayLUT(workingColor, lutTexture, lutSampler, lutUniforms);
+    const float3 rawInputColor = sourceColor.rgb;
+    const float3 previewColor = applyDisplayLUT(rawInputColor, lutTexture, lutSampler, lutUniforms);
+    const float3 analysisColor = analysisColorForSource(rawInputColor, previewColor, monitorUniforms[1].w);
+    float3 displayColor = previewColor;
 
-    const float luma = rec709Luma(workingColor);
+    const float luma = rec709Luma(analysisColor);
 
     if (monitorUniforms[0].y >= 0.5) {
         displayColor = falseColor(luma);
@@ -91,7 +94,7 @@ float hlgDecode(float x) {
     return clamp((exp((x - c) / a) + b) / 12.0, 0.0, 1.0);
 }
 
-float3 transformToWorkingSpace(float3 color, float encodingCode) {
+float3 experimentalDisplayTransform(float3 color, float encodingCode) {
     if (encodingCode < 0.5) {
         return clamp(color, 0.0, 1.0);
     }
@@ -104,13 +107,13 @@ float3 transformToWorkingSpace(float3 color, float encodingCode) {
 }
 
 float3 applyDisplayLUT(
-    float3 workingColor,
+    float3 rawInputColor,
     texture3d<float, access::sample> lutTexture,
     sampler lutSampler,
     constant float4 *lutUniforms
 ) {
     if (lutUniforms[0].x < 0.5) {
-        return workingColor;
+        return rawInputColor;
     }
 
     const float intensity = clamp(lutUniforms[0].y, 0.0, 1.0);
@@ -118,10 +121,18 @@ float3 applyDisplayLUT(
     const float3 domainMin = lutUniforms[1].xyz;
     const float3 domainMax = lutUniforms[2].xyz;
     const float3 domainRange = max(domainMax - domainMin, float3(0.00001));
-    const float3 normalizedColor = clamp((workingColor - domainMin) / domainRange, 0.0, 1.0);
+    const float3 normalizedColor = clamp((rawInputColor - domainMin) / domainRange, 0.0, 1.0);
     const float3 lutCoordinate = ((normalizedColor * (cubeSize - 1.0)) + 0.5) / cubeSize;
     const float3 lutColor = lutTexture.sample(lutSampler, lutCoordinate).rgb;
-    return mix(workingColor, lutColor, intensity);
+    return mix(rawInputColor, lutColor, intensity);
+}
+
+float3 analysisColorForSource(float3 rawInputColor, float3 previewColor, float analysisSourceCode) {
+    if (analysisSourceCode >= 0.5) {
+        return previewColor;
+    }
+
+    return rawInputColor;
 }
 
 float rec709Luma(float3 color) {
@@ -203,18 +214,19 @@ kernel void scopeCompute(
 
     const uint binWidth = max(uint(scopeUniforms[0].x), 1u);
     const uint binHeight = max(uint(scopeUniforms[0].y), 1u);
-    const float encodingCode = scopeUniforms[0].z;
+    const float analysisSourceCode = scopeUniforms[0].w;
     const uint sourceX = min(uint((float(gid.x) + 0.5) * float(sourceWidth) / float(sampleWidth)), sourceWidth - 1u);
     const uint sourceY = min(uint((float(gid.y) + 0.5) * float(sourceHeight) / float(sampleHeight)), sourceHeight - 1u);
     const float4 sourceColor = sourceTexture.read(uint2(sourceX, sourceY));
-    const float3 workingColor = transformToWorkingSpace(sourceColor.rgb, encodingCode);
-    const float3 displayColor = applyDisplayLUT(workingColor, lutTexture, lutSampler, lutUniforms);
+    const float3 rawInputColor = sourceColor.rgb;
+    const float3 previewColor = applyDisplayLUT(rawInputColor, lutTexture, lutSampler, lutUniforms);
+    const float3 analysisColor = analysisColorForSource(rawInputColor, previewColor, analysisSourceCode);
     const uint column = min((gid.x * binWidth) / sampleWidth, binWidth - 1u);
 
-    const uint lumaIndex = column * binHeight + scopeBin(rec709Luma(displayColor), binHeight);
-    const uint redIndex = column * binHeight + scopeBin(displayColor.r, binHeight);
-    const uint greenIndex = column * binHeight + scopeBin(displayColor.g, binHeight);
-    const uint blueIndex = column * binHeight + scopeBin(displayColor.b, binHeight);
+    const uint lumaIndex = column * binHeight + scopeBin(rec709Luma(analysisColor), binHeight);
+    const uint redIndex = column * binHeight + scopeBin(analysisColor.r, binHeight);
+    const uint greenIndex = column * binHeight + scopeBin(analysisColor.g, binHeight);
+    const uint blueIndex = column * binHeight + scopeBin(analysisColor.b, binHeight);
 
     atomic_fetch_add_explicit(&lumaBins[lumaIndex], 1u, memory_order_relaxed);
     atomic_fetch_add_explicit(&redBins[redIndex], 1u, memory_order_relaxed);

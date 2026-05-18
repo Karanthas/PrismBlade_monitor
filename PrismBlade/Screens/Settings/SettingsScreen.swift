@@ -57,6 +57,15 @@ struct SettingsScreen: View {
                         }
                     }
 
+                    Picker("曝光分析源", selection: Binding(
+                        get: { session.state.monitor.exposureAnalysisSource },
+                        set: { session.setExposureAnalysisSource($0) }
+                    )) {
+                        ForEach(ExposureAnalysisSource.allCases) { source in
+                            Text(source.title).tag(source)
+                        }
+                    }
+
                     VStack(alignment: .leading) {
                         Text("透明度 \(Int(session.state.monitor.scopeOpacity * 100))%")
                         Slider(
