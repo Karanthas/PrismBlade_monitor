@@ -81,8 +81,20 @@ final class MonitorSession: ObservableObject {
         state.monitor.falseColorEnabled.toggle()
     }
 
+    func setFalseColorDefaultEnabled(_ isEnabled: Bool) {
+        state.monitor.falseColorDefaultEnabled = isEnabled
+        state.monitor.falseColorEnabled = isEnabled
+        defaults.set(isEnabled, forKey: DefaultsKey.falseColorDefaultEnabled)
+    }
+
     func toggleZebra() {
         state.monitor.zebraEnabled.toggle()
+    }
+
+    func setZebraDefaultEnabled(_ isEnabled: Bool) {
+        state.monitor.zebraDefaultEnabled = isEnabled
+        state.monitor.zebraEnabled = isEnabled
+        defaults.set(isEnabled, forKey: DefaultsKey.zebraDefaultEnabled)
     }
 
     func setZebraMode(_ mode: ZebraMode) {
@@ -120,6 +132,10 @@ final class MonitorSession: ObservableObject {
     func setLUTEnabled(_ isEnabled: Bool) {
         state.lut.isEnabled = isEnabled
         defaults.set(isEnabled, forKey: DefaultsKey.lutEnabled)
+    }
+
+    func toggleLUTPreview() {
+        setLUTEnabled(!state.lut.isEnabled)
     }
 
     func setLUTIntensity(_ intensity: Double) {
@@ -294,6 +310,18 @@ final class MonitorSession: ObservableObject {
             state.monitor.zebraThreshold = threshold
         }
 
+        if defaults.object(forKey: DefaultsKey.falseColorDefaultEnabled) != nil {
+            let defaultEnabled = defaults.bool(forKey: DefaultsKey.falseColorDefaultEnabled)
+            state.monitor.falseColorDefaultEnabled = defaultEnabled
+            state.monitor.falseColorEnabled = defaultEnabled
+        }
+
+        if defaults.object(forKey: DefaultsKey.zebraDefaultEnabled) != nil {
+            let defaultEnabled = defaults.bool(forKey: DefaultsKey.zebraDefaultEnabled)
+            state.monitor.zebraDefaultEnabled = defaultEnabled
+            state.monitor.zebraEnabled = defaultEnabled
+        }
+
         if let rawScope = defaults.string(forKey: DefaultsKey.scopeMode),
            let scopeMode = ScopeMode(rawValue: rawScope) {
             state.monitor.scopeMode = scopeMode
@@ -349,6 +377,8 @@ final class MonitorSession: ObservableObject {
 
 private enum DefaultsKey {
     static let allowsPortraitMonitoring = "PrismBlade.allowsPortraitMonitoring"
+    static let falseColorDefaultEnabled = "PrismBlade.falseColorDefaultEnabled"
+    static let zebraDefaultEnabled = "PrismBlade.zebraDefaultEnabled"
     static let zebraThreshold = "PrismBlade.zebraThreshold"
     static let scopeMode = "PrismBlade.scopeMode"
     static let scopeOpacity = "PrismBlade.scopeOpacity"

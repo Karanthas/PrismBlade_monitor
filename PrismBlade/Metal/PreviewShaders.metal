@@ -30,6 +30,7 @@ vertex PreviewVertexOut previewVertex(uint vertexID [[vertex_id]]) {
 float nlogDecode(float x);
 float hlgDecode(float x);
 float3 transformToWorkingSpace(float3 color, float encodingCode);
+float3 applyDisplayLUT(float3 workingColor, texture3d<float, access::sample> lutTexture, sampler lutSampler, constant float4 *lutUniforms);
 float rec709Luma(float3 color);
 float3 falseColor(float luma);
 bool zebraApplies(float luma, constant float4 *monitorUniforms);
@@ -47,20 +48,7 @@ fragment float4 previewFragment(
 ) {
     const float4 sourceColor = sourceTexture.sample(sourceSampler, in.textureCoordinate);
     const float3 workingColor = transformToWorkingSpace(sourceColor.rgb, monitorUniforms[0].x);
-    const float isEnabled = lutUniforms[0].x;
-    float3 displayColor = workingColor;
-
-    if (isEnabled >= 0.5) {
-        const float intensity = clamp(lutUniforms[0].y, 0.0, 1.0);
-        const float cubeSize = max(lutUniforms[0].z, 1.0);
-        const float3 domainMin = lutUniforms[1].xyz;
-        const float3 domainMax = lutUniforms[2].xyz;
-        const float3 domainRange = max(domainMax - domainMin, float3(0.00001));
-        const float3 normalizedColor = clamp((workingColor - domainMin) / domainRange, 0.0, 1.0);
-        const float3 lutCoordinate = ((normalizedColor * (cubeSize - 1.0)) + 0.5) / cubeSize;
-        const float3 lutColor = lutTexture.sample(lutSampler, lutCoordinate).rgb;
-        displayColor = mix(workingColor, lutColor, intensity);
-    }
+    float3 displayColor = applyDisplayLUT(workingColor, lutTexture, lutSampler, lutUniforms);
 
     const float luma = rec709Luma(workingColor);
 
@@ -113,6 +101,27 @@ float3 transformToWorkingSpace(float3 color, float encodingCode) {
     }
 
     return float3(hlgDecode(color.r), hlgDecode(color.g), hlgDecode(color.b));
+}
+
+float3 applyDisplayLUT(
+    float3 workingColor,
+    texture3d<float, access::sample> lutTexture,
+    sampler lutSampler,
+    constant float4 *lutUniforms
+) {
+    if (lutUniforms[0].x < 0.5) {
+        return workingColor;
+    }
+
+    const float intensity = clamp(lutUniforms[0].y, 0.0, 1.0);
+    const float cubeSize = max(lutUniforms[0].z, 1.0);
+    const float3 domainMin = lutUniforms[1].xyz;
+    const float3 domainMax = lutUniforms[2].xyz;
+    const float3 domainRange = max(domainMax - domainMin, float3(0.00001));
+    const float3 normalizedColor = clamp((workingColor - domainMin) / domainRange, 0.0, 1.0);
+    const float3 lutCoordinate = ((normalizedColor * (cubeSize - 1.0)) + 0.5) / cubeSize;
+    const float3 lutColor = lutTexture.sample(lutSampler, lutCoordinate).rgb;
+    return mix(workingColor, lutColor, intensity);
 }
 
 float rec709Luma(float3 color) {
@@ -173,11 +182,14 @@ float3 applyZebra(float3 color, float2 pixelPosition) {
 
 kernel void scopeCompute(
     texture2d<float, access::read> sourceTexture [[texture(0)]],
+    texture3d<float, access::sample> lutTexture [[texture(1)]],
+    sampler lutSampler [[sampler(0)]],
     device atomic_uint *lumaBins [[buffer(0)]],
     device atomic_uint *redBins [[buffer(1)]],
     device atomic_uint *greenBins [[buffer(2)]],
     device atomic_uint *blueBins [[buffer(3)]],
     constant float4 *scopeUniforms [[buffer(4)]],
+    constant float4 *lutUniforms [[buffer(5)]],
     uint2 gid [[thread_position_in_grid]]
 ) {
     const uint sourceWidth = sourceTexture.get_width();
@@ -196,12 +208,13 @@ kernel void scopeCompute(
     const uint sourceY = min(uint((float(gid.y) + 0.5) * float(sourceHeight) / float(sampleHeight)), sourceHeight - 1u);
     const float4 sourceColor = sourceTexture.read(uint2(sourceX, sourceY));
     const float3 workingColor = transformToWorkingSpace(sourceColor.rgb, encodingCode);
+    const float3 displayColor = applyDisplayLUT(workingColor, lutTexture, lutSampler, lutUniforms);
     const uint column = min((gid.x * binWidth) / sampleWidth, binWidth - 1u);
 
-    const uint lumaIndex = column * binHeight + scopeBin(rec709Luma(workingColor), binHeight);
-    const uint redIndex = column * binHeight + scopeBin(workingColor.r, binHeight);
-    const uint greenIndex = column * binHeight + scopeBin(workingColor.g, binHeight);
-    const uint blueIndex = column * binHeight + scopeBin(workingColor.b, binHeight);
+    const uint lumaIndex = column * binHeight + scopeBin(rec709Luma(displayColor), binHeight);
+    const uint redIndex = column * binHeight + scopeBin(displayColor.r, binHeight);
+    const uint greenIndex = column * binHeight + scopeBin(displayColor.g, binHeight);
+    const uint blueIndex = column * binHeight + scopeBin(displayColor.b, binHeight);
 
     atomic_fetch_add_explicit(&lumaBins[lumaIndex], 1u, memory_order_relaxed);
     atomic_fetch_add_explicit(&redBins[redIndex], 1u, memory_order_relaxed);

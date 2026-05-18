@@ -10,6 +10,7 @@ xcuserdata/
 
 # Xcode build products
 DerivedData/
+.derivedData/
 build/
 Build/
 *.ipa

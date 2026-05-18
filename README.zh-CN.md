@@ -36,10 +36,12 @@
 - Metal texture 桥接：`MetalTextureBridge` 将 BGRA `CVPixelBuffer` 转换为 `.bgra8Unorm` `MTLTexture`。
 - Metal 主预览：`MetalPreviewRenderer` 使用 `MTLDevice`、`MTLCommandQueue`、基础 render pipeline 和 `PreviewShaders.metal` 原样显示输入帧。
 - Metal preview shader 中的 Rec.709、N-Log、HLG 输入到显示工作空间的转换。
+- Rec.709 输入默认直接输出到监看显示链路；N-Log 输入可通过监看界面的 N-Log LUT 预览按钮启用选中 `.cube` LUT。
 - Metal preview shader 中的显示链路 3D LUT 应用，并通过 LUT intensity 混合工作空间画面和 LUT 后画面。
 - 基于转换后显示亮度的 shader 伪色。
 - 基于转换后显示亮度和设置阈值的 High Zebra / Range Zebra mask。
-- Metal compute 生成的 Luma waveform 和 RGB Parade scope bins，由 `ScopePanel` 绘制，不再使用程序占位曲线。
+- Metal compute 生成的 Luma waveform 和 RGB Parade scope bins，由 `ScopePanel` 绘制，不再使用程序占位曲线；默认分析颜色转换和 N-Log LUT 预览后的画面，不包含伪色/斑马纹 overlay。
+- `MetalFrameProcessor` 统一解析 LUT 预览状态、生成 shader uniforms，并编排 scope compute 所需的同一份显示状态。
 - `LUTPass` 将解析后的 `.cube` entries 转换为 `.rgba32Float` 3D `MTLTexture` resource。
 - identity fallback LUT resource：未启用 LUT 或无法解析当前 LUT 时，renderer 仍可继续绘制。
 - SwiftUI / Metal 集成：`MetalPreviewSurface` 通过 `UIViewRepresentable` 包装 `MTKView`，替代主预览中的 SwiftUI gradient 占位层。
@@ -67,7 +69,7 @@
 - `.cube` 解析器：支持 `TITLE`、`LUT_3D_SIZE`、`DOMAIN_MIN`、`DOMAIN_MAX`、注释和 RGB 数据行校验。
 - 可选本地 LUT 目录：`PrismBlade/Resources/LUTs` 下被忽略的厂商 LUT 文件，只有实际存在且解析成功时才会显示。
 - LUT metadata 通过 JSON index 持久化到 App documents 目录。
-- 设置页：竖屏监看开关、斑马纹阈值、scope 透明度、scope 模式和 Mock 调试入口。
+- 设置页：竖屏监看开关、伪色/斑马纹默认开启偏好、斑马纹阈值、scope 透明度、scope 模式和 Mock 调试入口。
 - Mock Nikon Z6III 相机控制：
   - 曝光模式
   - 光圈
@@ -78,7 +80,7 @@
   - 录制开关
   - 拍照动作
   - 对焦动作
-- `v0.2.1` 阶段 1-5 XCTest target：
+- `v0.2.1` 阶段 1-6 XCTest target：
   - 小尺寸 BGRA `CVPixelBuffer` 测试图生成。
   - 合法和非法 `.cube` LUT fixture 生成。
   - luma、LUT 采样、斑马纹 mask、waveform bins 的 CPU reference helper。
@@ -91,6 +93,7 @@
   - `LUTPass` 3D texture 上传顺序、domain 保留和 texture format 测试。
   - `ColorTransformPass` 使用生成的 Rec.709 / N-Log / HLG 输入做参考测试。
   - `MetalLUTShaderTests` 使用离屏渲染验证 LUT intensity 混合、N-Log 显示转换、生成灰阶伪色和斑马纹阈值行为。
+  - `ScopeComputePassTests` 验证 waveform / RGB Parade bins、readback 节流，以及启用 N-Log LUT 预览时 scope 分析 LUT 后结果。
 
 ## 尚未实现
 
@@ -99,12 +102,9 @@
 - ImageCaptureCore 接入。
 - `libgphoto2` 接入。
 - 用户可见的真实视频文件播放入口。
-- MetalFrameProcessor pass 编排。
 - 基于色彩空间的自动 LUT 建议。
-- 基于真实 pixel buffer 的示波器分析。
 - 真实相机曝光模式读取。
 - 真实 Nikon 能力表解析。
-- 基于真实像素的 scope compute 测试。
 - 基于真实 Nikon 灰卡、色卡、肤色和 waveform 参考素材的深度颜色校准。
 - Histogram。
 - 对焦峰值。
@@ -339,7 +339,7 @@ xcodebuild \
 ** TEST EXECUTE SUCCEEDED **
 ```
 
-当前阶段 3-6 测试共有 48 个。成功时终端会逐个打印测试用例，并以 `TEST EXECUTE SUCCEEDED` 结束。
+当前阶段 3-6 测试共有 49 个。成功时终端会逐个打印测试用例，并以 `TEST EXECUTE SUCCEEDED` 结束。
 
 ### 本地真实素材
 
@@ -381,16 +381,16 @@ xcodebuild \
 
 `v0.1.3` 中 scope 面板保持约 40% 屏幕宽度，避免 waveform / RGB Parade 大面积遮挡监看画面。当相机参数调整浮层打开时，scope 面板会向上避让，避免与底部控制区域重叠。
 
-阶段 3 开始，主预览由 `MTKView` 绘制：`VideoFrame.pixelBuffer` 会通过 `CVMetalTextureCache` 桥接为 `MTLTexture`，再由 `PreviewShaders.metal` 采样到 drawable。阶段 4 会绑定 3D LUT texture，并在 fragment shader 中按 intensity 混合 LUT 输出。阶段 5 会把输入色彩编码和曝光辅助状态传入 shader。阶段 6 新增节流的 compute 旁路，读取同一份 source texture 并生成紧凑的 `ScopeData` bins，当前预览路径是：
+阶段 3 开始，主预览由 `MTKView` 绘制：`VideoFrame.pixelBuffer` 会通过 `CVMetalTextureCache` 桥接为 `MTLTexture`，再由 `PreviewShaders.metal` 采样到 drawable。阶段 4 会绑定 3D LUT texture，并在 fragment shader 中按 intensity 混合 LUT 输出。阶段 5 会把输入色彩编码和曝光辅助状态传入 shader。阶段 6 新增节流的 compute 旁路，读取同一份 source texture 并生成紧凑的 `ScopeData` bins。当前由 `MetalFrameProcessor` 统一决定显示状态：Rec.709 直接输出，N-Log 在启用 LUT 预览且选中 LUT 时应用 LUT，scope 默认跟随 LUT 后显示结果。
 
 ```text
 source texture
   -> Rec.709 / N-Log / HLG 显示转换
-  -> LUT，若启用
+  -> N-Log LUT 预览，若启用且已选择 LUT
   -> 伪色，若启用
   -> 斑马纹，若启用
   -> MTKView drawable
-  -> 旁路：ScopeComputePass，若 scope 启用
+  -> 旁路：ScopeComputePass，若 scope 启用，分析颜色转换和 LUT 后结果
   -> ScopeData readback
   -> ScopePanel
 ```
@@ -493,16 +493,15 @@ iPhone 17 Pro Simulator 上 app 构建、测试构建和测试执行均已成功
 
 推荐按以下顺序继续开发：
 
-1. 继续打磨 `v0.2.1` 阶段 4-6 显示与 scope 路径。
+1. 进入 `v0.2.1` 阶段 7 集成验证。
    - 使用可选本地 Nikon / N-Log LUT 做更多真实素材验证。
    - 除非确认授权允许再分发，否则继续把本地厂商 LUT 资源留在仓库之外。
-   - 决定是否根据 `FrameFormat.colorEncoding` 提供 LUT 自动建议。
    - 等真实灰卡、色卡、肤色和参考 scope 素材到位后，校准 N-Log / HLG、伪色、斑马纹、waveform 和 RGB Parade 行为。
 
-2. 当管线继续增长时，把当前 preview shader 拆成更清晰的 pass 边界。
-   - 随着颜色、LUT、曝光辅助和 scope pass 继续独立，把更多编排逻辑移入 `MetalFrameProcessor`。
-   - 保持颜色转换作为唯一输入解释入口。
-   - 保持伪色和斑马纹只影响监看显示。
+2. 继续保持当前显示策略。
+   - Rec.709 输入默认直出，不自动套 LUT。
+   - N-Log 输入通过监看界面的 N-Log LUT 预览按钮切换选中 LUT。
+   - 伪色和斑马纹只影响监看显示，不进入 scope 分析。
 
 3. 深化 scope 验证。
    - 为更重的真实素材增加降采样选项。

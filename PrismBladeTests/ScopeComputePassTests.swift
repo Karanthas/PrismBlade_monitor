@@ -91,9 +91,14 @@ final class ScopeComputePassTests: XCTestCase {
             XCTFail("Unable to create command buffer")
             return
         }
+        let lutResource = try LUTPass(device: environment.device).fallbackResource()
+        let samplerState = try makeLUTSampler(device: environment.device)
 
         let didEncode = pass.encodeIfNeeded(
             sourceTexture: texture,
+            lutTexture: lutResource.texture,
+            lutSamplerState: samplerState,
+            lutUniforms: makeLUTUniforms(resource: lutResource, enabled: false),
             frame: try makeFrame(sequence: 3),
             monitor: makeMonitor(scopeMode: .off),
             commandBuffer: commandBuffer
@@ -123,10 +128,15 @@ final class ScopeComputePassTests: XCTestCase {
             XCTFail("Unable to create command buffers")
             return
         }
+        let lutResource = try LUTPass(device: environment.device).fallbackResource()
+        let samplerState = try makeLUTSampler(device: environment.device)
         let expectation = expectation(description: "First readback completes")
 
         let firstDidEncode = pass.encodeIfNeeded(
             sourceTexture: texture,
+            lutTexture: lutResource.texture,
+            lutSamplerState: samplerState,
+            lutUniforms: makeLUTUniforms(resource: lutResource, enabled: false),
             frame: try makeFrame(sequence: 4),
             monitor: makeMonitor(scopeMode: .lumaWaveform),
             commandBuffer: firstCommandBuffer
@@ -135,6 +145,9 @@ final class ScopeComputePassTests: XCTestCase {
         }
         let secondDidEncode = pass.encodeIfNeeded(
             sourceTexture: texture,
+            lutTexture: lutResource.texture,
+            lutSamplerState: samplerState,
+            lutUniforms: makeLUTUniforms(resource: lutResource, enabled: false),
             frame: try makeFrame(sequence: 5),
             monitor: makeMonitor(scopeMode: .lumaWaveform),
             commandBuffer: secondCommandBuffer
@@ -148,6 +161,35 @@ final class ScopeComputePassTests: XCTestCase {
 
         firstCommandBuffer.commit()
         wait(for: [expectation], timeout: 2)
+    }
+
+    func testScopeSamplesLUTPreviewResultWhenEnabled() throws {
+        let environment = try makeEnvironment()
+        let texture = try makeTexture(
+            device: environment.device,
+            width: 1,
+            height: 1,
+            pixels: [SIMD4<Float>(0.5, 0.5, 0.5, 1)]
+        )
+        let pass = try ScopeComputePass(
+            device: environment.device,
+            library: environment.library,
+            configuration: ScopeComputePass.Configuration(binWidth: 1, binHeight: 4, frameInterval: 1)
+        )
+        let parsed = try LUTParser().parse(CubeFixtureFactory.redChannelRamp(size: 2))
+        let lutResource = try LUTPass(device: environment.device).makeTextureResource(from: parsed)
+        let data = try encodeScope(
+            pass: pass,
+            texture: texture,
+            frame: try makeFrame(sequence: 6),
+            monitor: makeMonitor(scopeMode: .lumaWaveform),
+            commandQueue: environment.commandQueue,
+            lutResource: lutResource,
+            lutEnabled: true
+        )
+
+        XCTAssertGreaterThan(data.lumaBins[index(column: 0, row: 0, binHeight: 4)], 0.9)
+        XCTAssertEqual(data.lumaBins[index(column: 0, row: 2, binHeight: 4)], 0, accuracy: 0.01)
     }
 
     private func makeEnvironment() throws -> MetalEnvironment {
@@ -168,16 +210,28 @@ final class ScopeComputePassTests: XCTestCase {
         texture: MTLTexture,
         frame: VideoFrame,
         monitor: MonitorState,
-        commandQueue: MTLCommandQueue
+        commandQueue: MTLCommandQueue,
+        lutResource: LUTTextureResource? = nil,
+        lutEnabled: Bool = false
     ) throws -> ScopeData {
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             throw XCTSkip("Unable to create command buffer")
         }
 
+        let resolvedLUTResource: LUTTextureResource
+        if let lutResource {
+            resolvedLUTResource = lutResource
+        } else {
+            resolvedLUTResource = try LUTPass(device: commandQueue.device).fallbackResource()
+        }
+        let samplerState = try makeLUTSampler(device: commandQueue.device)
         let expectation = expectation(description: "Scope data is read back")
         var scopeData: ScopeData?
         let didEncode = pass.encodeIfNeeded(
             sourceTexture: texture,
+            lutTexture: resolvedLUTResource.texture,
+            lutSamplerState: samplerState,
+            lutUniforms: makeLUTUniforms(resource: resolvedLUTResource, enabled: lutEnabled),
             frame: frame,
             monitor: monitor,
             commandBuffer: commandBuffer
@@ -196,6 +250,29 @@ final class ScopeComputePassTests: XCTestCase {
         }
 
         return scopeData
+    }
+
+    private func makeLUTSampler(device: MTLDevice) throws -> MTLSamplerState {
+        let descriptor = MTLSamplerDescriptor()
+        descriptor.minFilter = .linear
+        descriptor.magFilter = .linear
+        descriptor.sAddressMode = .clampToEdge
+        descriptor.tAddressMode = .clampToEdge
+        descriptor.rAddressMode = .clampToEdge
+
+        guard let sampler = device.makeSamplerState(descriptor: descriptor) else {
+            throw XCTSkip("Unable to create LUT sampler")
+        }
+
+        return sampler
+    }
+
+    private func makeLUTUniforms(resource: LUTTextureResource, enabled: Bool) -> [SIMD4<Float>] {
+        [
+            SIMD4<Float>(enabled ? 1 : 0, 1, Float(resource.cubeSize), 0),
+            SIMD4<Float>(resource.domainMin.x, resource.domainMin.y, resource.domainMin.z, 0),
+            SIMD4<Float>(resource.domainMax.x, resource.domainMax.y, resource.domainMax.z, 0)
+        ]
     }
 
     private func makeTexture(

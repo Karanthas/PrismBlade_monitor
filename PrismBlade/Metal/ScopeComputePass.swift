@@ -101,6 +101,9 @@ final class ScopeComputePass {
     @discardableResult
     func encodeIfNeeded(
         sourceTexture: MTLTexture,
+        lutTexture: MTLTexture,
+        lutSamplerState: MTLSamplerState,
+        lutUniforms: [SIMD4<Float>],
         frame: VideoFrame,
         monitor: MonitorState,
         commandBuffer: MTLCommandBuffer,
@@ -120,6 +123,8 @@ final class ScopeComputePass {
         computeEncoder.label = "PrismBlade Scope Compute Encoder"
         computeEncoder.setComputePipelineState(pipelineState)
         computeEncoder.setTexture(sourceTexture, index: 0)
+        computeEncoder.setTexture(lutTexture, index: 1)
+        computeEncoder.setSamplerState(lutSamplerState, index: 0)
         computeEncoder.setBuffer(lumaBinsBuffer, offset: 0, index: 0)
         computeEncoder.setBuffer(redBinsBuffer, offset: 0, index: 1)
         computeEncoder.setBuffer(greenBinsBuffer, offset: 0, index: 2)
@@ -143,6 +148,9 @@ final class ScopeComputePass {
         ]
         uniforms.withUnsafeBytes { bytes in
             computeEncoder.setBytes(bytes.baseAddress!, length: bytes.count, index: 4)
+        }
+        lutUniforms.withUnsafeBytes { bytes in
+            computeEncoder.setBytes(bytes.baseAddress!, length: bytes.count, index: 5)
         }
 
         let width = pipelineState.threadExecutionWidth

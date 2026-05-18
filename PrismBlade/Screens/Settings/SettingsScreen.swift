@@ -15,6 +15,16 @@ struct SettingsScreen: View {
                 }
 
                 Section("曝光辅助") {
+                    Toggle("默认开启伪色", isOn: Binding(
+                        get: { session.state.monitor.falseColorDefaultEnabled },
+                        set: { session.setFalseColorDefaultEnabled($0) }
+                    ))
+
+                    Toggle("默认开启斑马纹", isOn: Binding(
+                        get: { session.state.monitor.zebraDefaultEnabled },
+                        set: { session.setZebraDefaultEnabled($0) }
+                    ))
+
                     Picker("斑马纹模式", selection: Binding(
                         get: { session.state.monitor.zebraMode },
                         set: { session.setZebraMode($0) }

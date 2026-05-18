@@ -61,7 +61,9 @@ enum ConnectionState: Equatable {
 
 struct MonitorState: Equatable {
     var falseColorEnabled: Bool
+    var falseColorDefaultEnabled: Bool
     var zebraEnabled: Bool
+    var zebraDefaultEnabled: Bool
     var zebraMode: ZebraMode
     var zebraThreshold: Double
     var scopeMode: ScopeMode
@@ -71,7 +73,9 @@ struct MonitorState: Equatable {
 
     static let initial = MonitorState(
         falseColorEnabled: false,
+        falseColorDefaultEnabled: false,
         zebraEnabled: false,
+        zebraDefaultEnabled: false,
         zebraMode: .high,
         zebraThreshold: 90,
         scopeMode: .lumaWaveform,

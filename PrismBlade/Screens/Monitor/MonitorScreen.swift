@@ -89,8 +89,12 @@ struct MonitorScreen: View {
             Text("\(Int(session.latestFrame.format.frameRate))fps")
             Text(session.latestFrame.format.colorEncoding.rawValue)
 
-            if session.state.lut.isEnabled {
-                Text("LUT \(session.state.lut.selectedLUT?.title ?? "On")")
+            if isNLogInput {
+                if isNLogLUTPreviewActive {
+                    Text("N-Log LUT \(session.state.lut.selectedLUT?.title ?? "On")")
+                } else {
+                    Text("N-Log LUT Off")
+                }
             }
 
             if session.state.monitor.falseColorEnabled { Text("FC") }
@@ -122,7 +126,12 @@ struct MonitorScreen: View {
                 toolButton("Scope", systemImage: "waveform.path.ecg", isActive: session.state.monitor.scopeMode != .off) {
                     cycleScopeMode()
                 }
-                toolButton("LUT", systemImage: "slider.horizontal.3", isActive: session.state.lut.isEnabled) {
+                if isNLogInput {
+                    toolButton("N-Log LUT Preview", systemImage: "wand.and.stars", isActive: isNLogLUTPreviewActive) {
+                        toggleNLogLUTPreview()
+                    }
+                }
+                toolButton("LUT", systemImage: "slider.horizontal.3", isActive: isNLogLUTPreviewActive) {
                     activeSheet = .lutManager
                 }
                 Spacer()
@@ -169,6 +178,24 @@ struct MonitorScreen: View {
         let modes = ZoomMode.allCases
         let currentIndex = modes.firstIndex(of: session.state.monitor.zoomMode) ?? 0
         session.setZoomMode(modes[(currentIndex + 1) % modes.count])
+    }
+
+    private var isNLogInput: Bool {
+        session.latestFrame.format.colorEncoding == .nLog
+    }
+
+    private var isNLogLUTPreviewActive: Bool {
+        isNLogInput && session.state.lut.isEnabled && session.state.lut.selectedLUT != nil
+    }
+
+    private func toggleNLogLUTPreview() {
+        guard session.state.lut.selectedLUT != nil else {
+            session.showUserMessage("请先选择 N-Log 预览 LUT")
+            activeSheet = .lutManager
+            return
+        }
+
+        session.toggleLUTPreview()
     }
 }
 
