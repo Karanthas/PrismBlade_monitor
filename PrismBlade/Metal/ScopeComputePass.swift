@@ -156,8 +156,12 @@ final class ScopeComputePass {
         let width = pipelineState.threadExecutionWidth
         let height = max(pipelineState.maxTotalThreadsPerThreadgroup / max(width, 1), 1)
         let threadsPerThreadgroup = MTLSize(width: width, height: height, depth: 1)
-        let threadsPerGrid = MTLSize(width: sampleWidth, height: sampleHeight, depth: 1)
-        computeEncoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+        let threadgroupsPerGrid = MTLSize(
+            width: Self.threadgroupCount(for: sampleWidth, threadsPerThreadgroup: threadsPerThreadgroup.width),
+            height: Self.threadgroupCount(for: sampleHeight, threadsPerThreadgroup: threadsPerThreadgroup.height),
+            depth: 1
+        )
+        computeEncoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
         computeEncoder.endEncoding()
 
         commandBuffer.addCompletedHandler { [weak self] _ in
@@ -201,6 +205,10 @@ final class ScopeComputePass {
             blitEncoder.fill(buffer: buffer, range: 0..<bufferLength, value: 0)
         }
         blitEncoder.endEncoding()
+    }
+
+    private static func threadgroupCount(for threadCount: Int, threadsPerThreadgroup: Int) -> Int {
+        (threadCount + threadsPerThreadgroup - 1) / threadsPerThreadgroup
     }
 
     private func makeScopeData(sourceSequence: Int) -> ScopeData {

@@ -41,6 +41,7 @@ The app is intentionally built around replaceable boundaries:
 - Shader-based false color using converted display-space luma.
 - Shader-based high zebra and range zebra masks using converted display-space luma and the settings threshold.
 - Metal compute Luma waveform and RGB Parade scope bins, displayed by `ScopePanel` instead of generated placeholder curves; scope analysis follows the color-converted and N-Log LUT-previewed image by default, excluding false-color / zebra overlays.
+- Scope compute dispatch uses explicit threadgroup-grid sizing instead of `dispatchThreads`, improving compatibility across iOS Simulator and different Metal GPU families while preserving the same sampled pixels.
 - `MetalFrameProcessor` centralizes LUT preview resolution, shader uniform generation, and the shared display state used by scope compute.
 - `LUTPass` conversion from parsed `.cube` entries to `.rgba32Float` 3D `MTLTexture` resources.
 - Identity fallback LUT resource so the renderer can keep drawing when no LUT is enabled or a selected LUT cannot be resolved.
@@ -397,6 +398,8 @@ source texture
 
 The scope overlay now draws `ScopeData` bins from Metal compute. If readback is delayed, SwiftUI keeps displaying the previous scope data while preview rendering continues.
 
+`ScopeComputePass` dispatches whole threadgroups and lets the shader guard discard edge threads outside the sampled region. This avoids simulator-sensitive `dispatchThreads` behavior and remains compatible with devices that do not support non-uniform threadgroups.
+
 ### LUT Import
 
 1. Tap the LUT tool button.
@@ -468,6 +471,7 @@ Important implementation decisions are documented with inline comments in the Sw
 - Why generated gray / clipping inputs are enough for Stage 5 automation but do not replace real Nikon calibration materials.
 - Why the scope overlay is constrained to 40% width.
 - Why the scope overlay uses dynamic bottom avoidance when the parameter adjustment panel is open.
+- Why scope compute uses explicit `dispatchThreadgroups` sizing for simulator and GPU-family compatibility.
 
 The code intentionally favors reviewable boundaries over early performance optimization. Many comments are inline because this project is still shaping the real camera and rendering contracts.
 
