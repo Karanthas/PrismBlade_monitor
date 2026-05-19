@@ -6,7 +6,9 @@ final class MonitorSession: ObservableObject {
     // MonitorSession 是主 UI 状态容器；所有 @Published 更新固定在 MainActor，避免 SwiftUI 跨线程刷新。
     @Published private(set) var state = MonitorSessionState()
     @Published private(set) var latestFrame = VideoFrame.placeholder
+    @Published private(set) var scopeData: ScopeData?
     @Published private(set) var lastUserMessage: String?
+    let lutStore: LUTStore
 
     private let frameSource: FrameSource
     private let cameraService: CameraCommandService
@@ -25,6 +27,7 @@ final class MonitorSession: ObservableObject {
         self.frameSource = frameSource
         self.cameraService = cameraService
         self.lutRepository = lutRepository
+        lutStore = LUTStore(repository: lutRepository)
         restorePersistentState()
     }
 
@@ -78,8 +81,20 @@ final class MonitorSession: ObservableObject {
         state.monitor.falseColorEnabled.toggle()
     }
 
+    func setFalseColorDefaultEnabled(_ isEnabled: Bool) {
+        state.monitor.falseColorDefaultEnabled = isEnabled
+        state.monitor.falseColorEnabled = isEnabled
+        defaults.set(isEnabled, forKey: DefaultsKey.falseColorDefaultEnabled)
+    }
+
     func toggleZebra() {
         state.monitor.zebraEnabled.toggle()
+    }
+
+    func setZebraDefaultEnabled(_ isEnabled: Bool) {
+        state.monitor.zebraDefaultEnabled = isEnabled
+        state.monitor.zebraEnabled = isEnabled
+        defaults.set(isEnabled, forKey: DefaultsKey.zebraDefaultEnabled)
     }
 
     func setZebraMode(_ mode: ZebraMode) {
@@ -94,12 +109,25 @@ final class MonitorSession: ObservableObject {
 
     func setScopeMode(_ mode: ScopeMode) {
         state.monitor.scopeMode = mode
+        if mode == .off {
+            scopeData = nil
+        }
         defaults.set(mode.rawValue, forKey: DefaultsKey.scopeMode)
     }
 
     func setScopeOpacity(_ opacity: Double) {
         state.monitor.scopeOpacity = opacity
         defaults.set(opacity, forKey: DefaultsKey.scopeOpacity)
+    }
+
+    func setScopeDockPosition(_ position: ScopeDockPosition) {
+        state.monitor.scopeDockPosition = position
+        defaults.set(position.rawValue, forKey: DefaultsKey.scopeDockPosition)
+    }
+
+    func setExposureAnalysisSource(_ source: ExposureAnalysisSource) {
+        state.monitor.exposureAnalysisSource = source
+        defaults.set(source.rawValue, forKey: DefaultsKey.exposureAnalysisSource)
     }
 
     func setZoomMode(_ mode: ZoomMode) {
@@ -114,6 +142,10 @@ final class MonitorSession: ObservableObject {
     func setLUTEnabled(_ isEnabled: Bool) {
         state.lut.isEnabled = isEnabled
         defaults.set(isEnabled, forKey: DefaultsKey.lutEnabled)
+    }
+
+    func toggleLUTPreview() {
+        setLUTEnabled(!state.lut.isEnabled)
     }
 
     func setLUTIntensity(_ intensity: Double) {
@@ -187,6 +219,11 @@ final class MonitorSession: ObservableObject {
                 self?.lastUserMessage = nil
             }
         }
+    }
+
+    func updateScopeData(_ data: ScopeData) {
+        guard state.monitor.scopeMode != .off, data.isValid else { return }
+        scopeData = data
     }
 
     func importLUT(from url: URL) async {
@@ -275,12 +312,24 @@ final class MonitorSession: ObservableObject {
 
     private func restorePersistentState() {
         // restore 只恢复本地 UI 偏好；真正相机参数会在 connectMockCamera 后再次从 transport 对齐。
-        state.lut.builtInLUTs = LUTDescriptor.builtIn
+        state.lut.builtInLUTs = lutStore.loadBuiltInDescriptors()
         state.lut.importedLUTs = lutRepository.loadImportedDescriptors()
         state.orientation.allowsPortraitMonitoring = defaults.bool(forKey: DefaultsKey.allowsPortraitMonitoring)
 
         if let threshold = defaults.object(forKey: DefaultsKey.zebraThreshold) as? Double {
             state.monitor.zebraThreshold = threshold
+        }
+
+        if defaults.object(forKey: DefaultsKey.falseColorDefaultEnabled) != nil {
+            let defaultEnabled = defaults.bool(forKey: DefaultsKey.falseColorDefaultEnabled)
+            state.monitor.falseColorDefaultEnabled = defaultEnabled
+            state.monitor.falseColorEnabled = defaultEnabled
+        }
+
+        if defaults.object(forKey: DefaultsKey.zebraDefaultEnabled) != nil {
+            let defaultEnabled = defaults.bool(forKey: DefaultsKey.zebraDefaultEnabled)
+            state.monitor.zebraDefaultEnabled = defaultEnabled
+            state.monitor.zebraEnabled = defaultEnabled
         }
 
         if let rawScope = defaults.string(forKey: DefaultsKey.scopeMode),
@@ -290,6 +339,16 @@ final class MonitorSession: ObservableObject {
 
         if let opacity = defaults.object(forKey: DefaultsKey.scopeOpacity) as? Double {
             state.monitor.scopeOpacity = opacity
+        }
+
+        if let rawScopeDockPosition = defaults.string(forKey: DefaultsKey.scopeDockPosition),
+           let position = ScopeDockPosition(rawValue: rawScopeDockPosition) {
+            state.monitor.scopeDockPosition = position
+        }
+
+        if let rawAnalysisSource = defaults.string(forKey: DefaultsKey.exposureAnalysisSource),
+           let source = ExposureAnalysisSource(rawValue: rawAnalysisSource) {
+            state.monitor.exposureAnalysisSource = source
         }
 
         if let intensity = defaults.object(forKey: DefaultsKey.lutIntensity) as? Double {
@@ -338,9 +397,13 @@ final class MonitorSession: ObservableObject {
 
 private enum DefaultsKey {
     static let allowsPortraitMonitoring = "PrismBlade.allowsPortraitMonitoring"
+    static let falseColorDefaultEnabled = "PrismBlade.falseColorDefaultEnabled"
+    static let zebraDefaultEnabled = "PrismBlade.zebraDefaultEnabled"
     static let zebraThreshold = "PrismBlade.zebraThreshold"
     static let scopeMode = "PrismBlade.scopeMode"
     static let scopeOpacity = "PrismBlade.scopeOpacity"
+    static let scopeDockPosition = "PrismBlade.scopeDockPosition"
+    static let exposureAnalysisSource = "PrismBlade.exposureAnalysisSource"
     static let selectedLUTID = "PrismBlade.selectedLUTID"
     static let lutIntensity = "PrismBlade.lutIntensity"
     static let lutEnabled = "PrismBlade.lutEnabled"

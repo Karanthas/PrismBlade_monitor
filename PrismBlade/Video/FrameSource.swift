@@ -1,5 +1,7 @@
-import Foundation
 import CoreGraphics
+import CoreMedia
+import CoreVideo
+import Foundation
 
 protocol FrameSource {
     // 帧源协议只描述画面输入，不关心 USB、视频文件或模拟器生成方式。
@@ -29,22 +31,40 @@ enum SourceColorEncoding: String, Sendable {
     case hlg = "HLG"
 }
 
-struct VideoFrame: Equatable, Sendable {
+struct VideoFrame: Equatable, @unchecked Sendable {
     // sequence 用于后续丢帧/性能统计；timestamp 用于未来延迟和同步分析。
     var sequence: Int
-    var timestamp: Date
+    var timestamp: CMTime
     var format: FrameFormat
-    var phase: Double
+    var pixelBuffer: CVPixelBuffer
     // metadata 预留给未来真实 live view，把相机参数随帧带进显示链路。
     var metadata: FrameCameraMetadata
 
-    static let placeholder = VideoFrame(
-        sequence: 0,
-        timestamp: Date(),
-        format: FrameFormat(resolution: CGSize(width: 1920, height: 1080), frameRate: 30, colorEncoding: .rec709),
-        phase: 0,
-        metadata: FrameCameraMetadata(iso: "400", shutter: "1/50", aperture: "f/2.8", whiteBalance: "5600K")
-    )
+    static let placeholder: VideoFrame = {
+        let format = FrameFormat(
+            resolution: CGSize(width: 1280, height: 720),
+            frameRate: 30,
+            colorEncoding: .rec709
+        )
+
+        return VideoFrame(
+            sequence: 0,
+            timestamp: .zero,
+            format: format,
+            pixelBuffer: SimulatedPixelBufferFactory.makePlaceholderBuffer(format: format),
+            metadata: FrameCameraMetadata(iso: "400", shutter: "1/50", aperture: "f/2.8", whiteBalance: "5600K")
+        )
+    }()
+
+    static func == (lhs: VideoFrame, rhs: VideoFrame) -> Bool {
+        // CVPixelBuffer is a Core Foundation object, so semantic pixel-by-pixel equality would be too
+        // expensive for frame state comparisons. Identity plus metadata is enough for tests and UI diffing.
+        lhs.sequence == rhs.sequence &&
+            lhs.timestamp == rhs.timestamp &&
+            lhs.format == rhs.format &&
+            lhs.metadata == rhs.metadata &&
+            lhs.pixelBuffer === rhs.pixelBuffer
+    }
 }
 
 struct FrameCameraMetadata: Equatable, Sendable {
@@ -56,14 +76,28 @@ struct FrameCameraMetadata: Equatable, Sendable {
 
 final class SimulatedFrameSource: FrameSource {
     private(set) var status: FrameSourceStatus = .stopped
-    private(set) var format: FrameFormat? = FrameFormat(
-        resolution: CGSize(width: 1920, height: 1080),
-        frameRate: 30,
-        colorEncoding: .rec709
-    )
+    private(set) var format: FrameFormat?
 
+    private let metadata: FrameCameraMetadata
     private var continuation: AsyncStream<VideoFrame>.Continuation?
     private var task: Task<Void, Never>?
+
+    init(
+        format: FrameFormat = FrameFormat(
+            resolution: CGSize(width: 1280, height: 720),
+            frameRate: 30,
+            colorEncoding: .rec709
+        ),
+        metadata: FrameCameraMetadata = FrameCameraMetadata(
+            iso: "400",
+            shutter: "1/50",
+            aperture: "f/2.8",
+            whiteBalance: "5600K"
+        )
+    ) {
+        self.format = format
+        self.metadata = metadata
+    }
 
     func start() async throws {
         status = .running
@@ -76,17 +110,28 @@ final class SimulatedFrameSource: FrameSource {
 
             while !Task.isCancelled {
                 sequence += 1
-                // phase 是 0...1 的循环进度，SyntheticPreviewView 用它驱动移动色块。
-                let phase = Double(sequence % 240) / 240
+                let currentFormat = format ?? VideoFrame.placeholder.format
 
-                // 程序生成 ramp + 色块，避免首版依赖外部测试视频资源。
-                continuation?.yield(VideoFrame(
-                    sequence: sequence,
-                    timestamp: Date(),
-                    format: format ?? VideoFrame.placeholder.format,
-                    phase: phase,
-                    metadata: FrameCameraMetadata(iso: "400", shutter: "1/50", aperture: "f/2.8", whiteBalance: "5600K")
-                ))
+                do {
+                    // 阶段 2 开始模拟源也必须生成真实 CVPixelBuffer。后续 Metal renderer、
+                    // LUT、伪色、斑马纹和 scope 都会消费同一份像素数据，而不是各自重建画面。
+                    let pixelBuffer = try SimulatedPixelBufferFactory.makeFrame(
+                        sequence: sequence,
+                        format: currentFormat
+                    )
+
+                    continuation?.yield(VideoFrame(
+                        sequence: sequence,
+                        timestamp: Self.timestamp(for: sequence, frameRate: currentFormat.frameRate),
+                        format: currentFormat,
+                        pixelBuffer: pixelBuffer,
+                        metadata: metadata
+                    ))
+                } catch {
+                    status = .failed(error.localizedDescription)
+                    continuation?.finish()
+                    return
+                }
 
                 // 约 30fps，匹配技术文档中首版监看目标，同时避免模拟器负载过高。
                 try? await Task.sleep(nanoseconds: 33_333_333)
@@ -106,5 +151,10 @@ final class SimulatedFrameSource: FrameSource {
             // 保存 continuation 让 start() 中的后台任务可以持续推送模拟帧。
             self.continuation = continuation
         }
+    }
+
+    private static func timestamp(for sequence: Int, frameRate: Double) -> CMTime {
+        let timescale = max(Int32(frameRate.rounded()), 1)
+        return CMTime(value: CMTimeValue(sequence), timescale: timescale)
     }
 }

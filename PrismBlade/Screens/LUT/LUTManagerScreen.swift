@@ -14,7 +14,7 @@ struct LUTManagerScreen: View {
         NavigationStack {
             List {
                 Section("启用") {
-                    Toggle("LUT", isOn: Binding(
+                    Toggle("N-Log LUT 预览", isOn: Binding(
                         get: { session.state.lut.isEnabled },
                         set: { session.setLUTEnabled($0) }
                     ))

@@ -15,6 +15,16 @@ struct SettingsScreen: View {
                 }
 
                 Section("曝光辅助") {
+                    Toggle("默认开启伪色", isOn: Binding(
+                        get: { session.state.monitor.falseColorDefaultEnabled },
+                        set: { session.setFalseColorDefaultEnabled($0) }
+                    ))
+
+                    Toggle("默认开启斑马纹", isOn: Binding(
+                        get: { session.state.monitor.zebraDefaultEnabled },
+                        set: { session.setZebraDefaultEnabled($0) }
+                    ))
+
                     Picker("斑马纹模式", selection: Binding(
                         get: { session.state.monitor.zebraMode },
                         set: { session.setZebraMode($0) }
@@ -44,6 +54,24 @@ struct SettingsScreen: View {
                     )) {
                         ForEach(ScopeMode.allCases) { mode in
                             Text(mode.title).tag(mode)
+                        }
+                    }
+
+                    Picker("曝光分析源", selection: Binding(
+                        get: { session.state.monitor.exposureAnalysisSource },
+                        set: { session.setExposureAnalysisSource($0) }
+                    )) {
+                        ForEach(ExposureAnalysisSource.allCases) { source in
+                            Text(source.title).tag(source)
+                        }
+                    }
+
+                    Picker("位置", selection: Binding(
+                        get: { session.state.monitor.scopeDockPosition },
+                        set: { session.setScopeDockPosition($0) }
+                    )) {
+                        ForEach(ScopeDockPosition.allCases) { position in
+                            Text(position.title).tag(position)
                         }
                     }
 

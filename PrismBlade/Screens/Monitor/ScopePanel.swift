@@ -3,17 +3,15 @@ import SwiftUI
 struct ScopePanel: View {
     var mode: ScopeMode
     var opacity: Double
-    var frame: VideoFrame
+    var analysisSource: ExposureAnalysisSource
+    var data: ScopeData?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(mode.title)
+                Text("\(mode.title) · \(analysisSource.compactTitle)")
                     .font(.caption.weight(.bold))
                 Spacer()
-                Text("显示链路采样")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.68))
             }
 
             Canvas { context, size in
@@ -23,9 +21,9 @@ struct ScopePanel: View {
                 case .off:
                     break
                 case .lumaWaveform:
-                    drawWaveform(context: context, size: size)
+                    drawWaveform(context: context, size: size, data: data)
                 case .rgbParade:
-                    drawRGBParade(context: context, size: size)
+                    drawRGBParade(context: context, size: size, data: data)
                 }
             }
         }
@@ -53,48 +51,82 @@ struct ScopePanel: View {
         context.stroke(grid, with: .color(.white.opacity(0.18)), lineWidth: 1)
     }
 
-    private func drawWaveform(context: GraphicsContext, size: CGSize) {
-        var path = Path()
-        let phase = frame.phase * Double.pi * 2
-
-        for x in stride(from: 0.0, through: size.width, by: 2) {
-            let normalizedX = Double(x / max(size.width, 1))
-            let luma = 0.5 + 0.42 * sin((normalizedX * 8 * Double.pi) + phase)
-            let y = size.height * (1 - luma)
-
-            if x == 0 {
-                path.move(to: CGPoint(x: x, y: y))
-            } else {
-                path.addLine(to: CGPoint(x: x, y: y))
-            }
-        }
-
-        context.stroke(path, with: .color(.green.opacity(0.95)), lineWidth: 2)
+    private func drawWaveform(context: GraphicsContext, size: CGSize, data: ScopeData?) {
+        guard let data, data.isValid else { return }
+        drawBins(
+            data.lumaBins,
+            binWidth: data.binWidth,
+            binHeight: data.binHeight,
+            rect: CGRect(origin: .zero, size: size),
+            color: .white,
+            minimumOpacity: 0.18,
+            context: context
+        )
     }
 
-    private func drawRGBParade(context: GraphicsContext, size: CGSize) {
+    private func drawRGBParade(context: GraphicsContext, size: CGSize, data: ScopeData?) {
+        guard let data, data.isValid else { return }
         let channelWidth = size.width / 3
-        let colors: [Color] = [.red, .green, .blue]
+        let channels: [(bins: [Float], color: Color)] = [
+            (data.redBins, .red),
+            (data.greenBins, .green),
+            (data.blueBins, .blue)
+        ]
 
-        for channel in 0..<3 {
-            var path = Path()
-            let startX = CGFloat(channel) * channelWidth
-            let phaseOffset = frame.phase * Double.pi * 2 + Double(channel)
+        for channel in 0..<channels.count {
+            drawBins(
+                channels[channel].bins,
+                binWidth: data.binWidth,
+                binHeight: data.binHeight,
+                rect: CGRect(
+                    x: CGFloat(channel) * channelWidth,
+                    y: 0,
+                    width: channelWidth,
+                    height: size.height
+                ),
+                color: channels[channel].color,
+                minimumOpacity: 0.20,
+                context: context
+            )
+        }
+    }
 
-            for localX in stride(from: 0.0, through: channelWidth, by: 2) {
-                let normalizedX = Double(localX / max(channelWidth, 1))
-                let value = 0.5 + 0.4 * sin((normalizedX * 6 * Double.pi) + phaseOffset)
-                let y = size.height * (1 - value)
-                let point = CGPoint(x: startX + localX, y: y)
+    private func drawBins(
+        _ bins: [Float],
+        binWidth: Int,
+        binHeight: Int,
+        rect: CGRect,
+        color: Color,
+        minimumOpacity: Double,
+        context: GraphicsContext
+    ) {
+        guard binWidth > 0, binHeight > 0, bins.count == binWidth * binHeight else {
+            return
+        }
 
-                if localX == 0 {
-                    path.move(to: point)
-                } else {
-                    path.addLine(to: point)
-                }
+        let cellWidth = rect.width / CGFloat(binWidth)
+        let cellHeight = rect.height / CGFloat(binHeight)
+
+        for column in 0..<binWidth {
+            for row in 0..<binHeight {
+                let intensity = min(max(Double(bins[column * binHeight + row]), 0), 1)
+                guard intensity > 0 else { continue }
+
+                let x = rect.minX + CGFloat(column) * cellWidth
+                let y = rect.maxY - CGFloat(row + 1) * cellHeight
+                let opacity = minimumOpacity + intensity * (1 - minimumOpacity)
+                let insetX = cellWidth >= 2 ? 0.5 : 0
+                let insetY = cellHeight >= 2 ? 0.5 : 0
+                context.fill(
+                    Path(CGRect(
+                        x: x + insetX,
+                        y: y + insetY,
+                        width: max(cellWidth - insetX * 2, 1),
+                        height: max(cellHeight - insetY * 2, 1)
+                    )),
+                    with: .color(color.opacity(opacity))
+                )
             }
-
-            context.stroke(path, with: .color(colors[channel].opacity(0.92)), lineWidth: 2)
         }
     }
 }

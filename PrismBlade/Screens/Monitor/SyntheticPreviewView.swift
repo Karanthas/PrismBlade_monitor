@@ -10,7 +10,7 @@ struct SyntheticPreviewView: View {
         GeometryReader { proxy in
             ZStack {
                 baseRamp
-                movingColorBlocks(phase: frame.phase)
+                movingColorBlocks(phase: previewPhase)
 
                 if lut.isEnabled, let descriptor = lut.selectedLUT {
                     descriptor.tintColor
@@ -41,6 +41,12 @@ struct SyntheticPreviewView: View {
             startPoint: .leading,
             endPoint: .trailing
         )
+    }
+
+    private var previewPhase: Double {
+        // 阶段 2 的权威画面已经进入 frame.pixelBuffer；当前 SwiftUI 预览仍是
+        // Metal 接入前的临时显示层，所以只从 sequence 推导动画相位，不再把相位存入媒体帧模型。
+        Double(frame.sequence % 240) / 240
     }
 
     private func movingColorBlocks(phase: Double) -> some View {

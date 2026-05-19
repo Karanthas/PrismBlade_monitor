@@ -24,7 +24,46 @@
 		AA0000000000000000000115 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000215 /* SettingsScreen.swift */; };
 		AA0000000000000000000116 /* LUTManagerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000216 /* LUTManagerScreen.swift */; };
 		AA0000000000000000000117 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000217 /* Assets.xcassets */; };
+		AA0000000000000000000118 /* SimulatedPixelBufferFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000230 /* SimulatedPixelBufferFactory.swift */; };
+		AA0000000000000000000119 /* VideoFileFrameSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000231 /* VideoFileFrameSource.swift */; };
+		AA0000000000000000000130 /* MetalTextureBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000233 /* MetalTextureBridge.swift */; };
+		AA0000000000000000000131 /* MetalPreviewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000234 /* MetalPreviewRenderer.swift */; };
+		AA0000000000000000000132 /* MetalPreviewSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000235 /* MetalPreviewSurface.swift */; };
+		AA0000000000000000000133 /* PreviewShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000236 /* PreviewShaders.metal */; };
+		AA0000000000000000000135 /* LUTStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000238 /* LUTStore.swift */; };
+		AA0000000000000000000136 /* LUTPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000239 /* LUTPass.swift */; };
+		AA0000000000000000000141 /* ColorTransformPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000244 /* ColorTransformPass.swift */; };
+		AA0000000000000000000142 /* FalseColorPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000245 /* FalseColorPass.swift */; };
+		AA0000000000000000000143 /* ZebraPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000246 /* ZebraPass.swift */; };
+		AA0000000000000000000144 /* ScopeComputePass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000247 /* ScopeComputePass.swift */; };
+		AA0000000000000000000145 /* MetalFrameProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000248 /* MetalFrameProcessor.swift */; };
+		AA0000000000000000000146 /* ScopeComputePassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000249 /* ScopeComputePassTests.swift */; };
+		AA0000000000000000000137 /* LUTRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000240 /* LUTRepositoryTests.swift */; };
+		AA0000000000000000000138 /* LUTPassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000241 /* LUTPassTests.swift */; };
+		AA0000000000000000000139 /* MetalLUTShaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000242 /* MetalLUTShaderTests.swift */; };
+		AA0000000000000000000140 /* LUTs in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000243 /* LUTs */; };
+		AA0000000000000000000120 /* PixelBufferFixtureFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000220 /* PixelBufferFixtureFactory.swift */; };
+		AA0000000000000000000121 /* CubeFixtureFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000221 /* CubeFixtureFactory.swift */; };
+		AA0000000000000000000122 /* CPUReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000222 /* CPUReference.swift */; };
+		AA0000000000000000000123 /* PixelBufferFixtureFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000223 /* PixelBufferFixtureFactoryTests.swift */; };
+		AA0000000000000000000124 /* LUTParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000224 /* LUTParserTests.swift */; };
+		AA0000000000000000000125 /* CameraExposureRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000225 /* CameraExposureRulesTests.swift */; };
+		AA0000000000000000000126 /* CameraCommandServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000226 /* CameraCommandServiceTests.swift */; };
+		AA0000000000000000000127 /* MockCameraTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000227 /* MockCameraTransportTests.swift */; };
+		AA0000000000000000000128 /* CPUReferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000228 /* CPUReferenceTests.swift */; };
+		AA0000000000000000000129 /* FrameSourceStage2Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000232 /* FrameSourceStage2Tests.swift */; };
+		AA0000000000000000000134 /* MetalTextureBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000237 /* MetalTextureBridgeTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AA0000000000000000000A01 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000701 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000501;
+			remoteInfo = PrismBlade;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		AA0000000000000000000201 /* PrismBladeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrismBladeApp.swift; sourceTree = "<group>"; };
@@ -46,10 +85,47 @@
 		AA0000000000000000000217 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA0000000000000000000218 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA0000000000000000000219 /* PrismBlade.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PrismBlade.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000220 /* PixelBufferFixtureFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelBufferFixtureFactory.swift; sourceTree = "<group>"; };
+		AA0000000000000000000221 /* CubeFixtureFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CubeFixtureFactory.swift; sourceTree = "<group>"; };
+		AA0000000000000000000222 /* CPUReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CPUReference.swift; sourceTree = "<group>"; };
+		AA0000000000000000000223 /* PixelBufferFixtureFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelBufferFixtureFactoryTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000224 /* LUTParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTParserTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000225 /* CameraExposureRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraExposureRulesTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000226 /* CameraCommandServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraCommandServiceTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000227 /* MockCameraTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockCameraTransportTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000228 /* CPUReferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CPUReferenceTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000229 /* PrismBladeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PrismBladeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000230 /* SimulatedPixelBufferFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimulatedPixelBufferFactory.swift; sourceTree = "<group>"; };
+		AA0000000000000000000231 /* VideoFileFrameSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoFileFrameSource.swift; sourceTree = "<group>"; };
+		AA0000000000000000000232 /* FrameSourceStage2Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameSourceStage2Tests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000233 /* MetalTextureBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalTextureBridge.swift; sourceTree = "<group>"; };
+		AA0000000000000000000234 /* MetalPreviewRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalPreviewRenderer.swift; sourceTree = "<group>"; };
+		AA0000000000000000000235 /* MetalPreviewSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalPreviewSurface.swift; sourceTree = "<group>"; };
+		AA0000000000000000000236 /* PreviewShaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = PreviewShaders.metal; sourceTree = "<group>"; };
+		AA0000000000000000000237 /* MetalTextureBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalTextureBridgeTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000238 /* LUTStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTStore.swift; sourceTree = "<group>"; };
+		AA0000000000000000000239 /* LUTPass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTPass.swift; sourceTree = "<group>"; };
+		AA0000000000000000000240 /* LUTRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTRepositoryTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000241 /* LUTPassTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LUTPassTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000242 /* MetalLUTShaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalLUTShaderTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000243 /* LUTs */ = {isa = PBXFileReference; lastKnownFileType = folder; path = LUTs; sourceTree = "<group>"; };
+		AA0000000000000000000244 /* ColorTransformPass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorTransformPass.swift; sourceTree = "<group>"; };
+		AA0000000000000000000245 /* FalseColorPass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FalseColorPass.swift; sourceTree = "<group>"; };
+		AA0000000000000000000246 /* ZebraPass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZebraPass.swift; sourceTree = "<group>"; };
+		AA0000000000000000000247 /* ScopeComputePass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScopeComputePass.swift; sourceTree = "<group>"; };
+		AA0000000000000000000248 /* MetalFrameProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalFrameProcessor.swift; sourceTree = "<group>"; };
+		AA0000000000000000000249 /* ScopeComputePassTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScopeComputePassTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		AA0000000000000000000301 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000302 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -63,6 +139,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000403 /* PrismBlade */,
+				AA0000000000000000000413 /* PrismBladeTests */,
 				AA0000000000000000000402 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -71,6 +148,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000219 /* PrismBlade.app */,
+				AA0000000000000000000229 /* PrismBladeTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -85,7 +163,9 @@
 				AA0000000000000000000405 /* Domain */,
 				AA0000000000000000000406 /* Camera */,
 				AA0000000000000000000407 /* Video */,
+				AA0000000000000000000416 /* Metal */,
 				AA0000000000000000000408 /* Imaging */,
+				AA0000000000000000000417 /* Resources */,
 				AA0000000000000000000409 /* Screens */,
 			);
 			path = PrismBlade;
@@ -122,6 +202,8 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000208 /* FrameSource.swift */,
+				AA0000000000000000000230 /* SimulatedPixelBufferFactory.swift */,
+				AA0000000000000000000231 /* VideoFileFrameSource.swift */,
 			);
 			path = Video;
 			sourceTree = "<group>";
@@ -131,8 +213,34 @@
 			children = (
 				AA0000000000000000000209 /* LUTParser.swift */,
 				AA0000000000000000000210 /* LUTRepository.swift */,
+				AA0000000000000000000238 /* LUTStore.swift */,
+				AA0000000000000000000239 /* LUTPass.swift */,
 			);
 			path = Imaging;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000417 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000243 /* LUTs */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000416 /* Metal */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000233 /* MetalTextureBridge.swift */,
+				AA0000000000000000000234 /* MetalPreviewRenderer.swift */,
+				AA0000000000000000000235 /* MetalPreviewSurface.swift */,
+				AA0000000000000000000248 /* MetalFrameProcessor.swift */,
+				AA0000000000000000000247 /* ScopeComputePass.swift */,
+				AA0000000000000000000236 /* PreviewShaders.metal */,
+				AA0000000000000000000244 /* ColorTransformPass.swift */,
+				AA0000000000000000000245 /* FalseColorPass.swift */,
+				AA0000000000000000000246 /* ZebraPass.swift */,
+			);
+			path = Metal;
 			sourceTree = "<group>";
 		};
 		AA0000000000000000000409 /* Screens */ = {
@@ -172,6 +280,44 @@
 			path = LUT;
 			sourceTree = "<group>";
 		};
+		AA0000000000000000000413 /* PrismBladeTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000414 /* Fixtures */,
+				AA0000000000000000000415 /* References */,
+				AA0000000000000000000223 /* PixelBufferFixtureFactoryTests.swift */,
+				AA0000000000000000000224 /* LUTParserTests.swift */,
+				AA0000000000000000000225 /* CameraExposureRulesTests.swift */,
+				AA0000000000000000000226 /* CameraCommandServiceTests.swift */,
+				AA0000000000000000000227 /* MockCameraTransportTests.swift */,
+				AA0000000000000000000228 /* CPUReferenceTests.swift */,
+				AA0000000000000000000232 /* FrameSourceStage2Tests.swift */,
+				AA0000000000000000000237 /* MetalTextureBridgeTests.swift */,
+				AA0000000000000000000240 /* LUTRepositoryTests.swift */,
+				AA0000000000000000000241 /* LUTPassTests.swift */,
+				AA0000000000000000000242 /* MetalLUTShaderTests.swift */,
+				AA0000000000000000000249 /* ScopeComputePassTests.swift */,
+			);
+			path = PrismBladeTests;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000414 /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000220 /* PixelBufferFixtureFactory.swift */,
+				AA0000000000000000000221 /* CubeFixtureFactory.swift */,
+			);
+			path = Fixtures;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000415 /* References */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000222 /* CPUReference.swift */,
+			);
+			path = References;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -192,6 +338,24 @@
 			productReference = AA0000000000000000000219 /* PrismBlade.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AA0000000000000000000502 /* PrismBladeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000903 /* Build configuration list for PBXNativeTarget "PrismBladeTests" */;
+			buildPhases = (
+				AA0000000000000000000603 /* Sources */,
+				AA0000000000000000000302 /* Frameworks */,
+				AA0000000000000000000604 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0000000000000000000B01 /* PBXTargetDependency */,
+			);
+			name = PrismBladeTests;
+			productName = PrismBladeTests;
+			productReference = AA0000000000000000000229 /* PrismBladeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -204,6 +368,10 @@
 				TargetAttributes = {
 					AA0000000000000000000501 = {
 						CreatedOnToolsVersion = 15.3;
+					};
+					AA0000000000000000000502 = {
+						CreatedOnToolsVersion = 15.3;
+						TestTargetID = AA0000000000000000000501;
 					};
 				};
 			};
@@ -221,6 +389,7 @@
 			projectRoot = "";
 			targets = (
 				AA0000000000000000000501 /* PrismBlade */,
+				AA0000000000000000000502 /* PrismBladeTests */,
 			);
 		};
 /* End PBXProject section */
@@ -231,6 +400,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000117 /* Assets.xcassets in Resources */,
+				AA0000000000000000000140 /* LUTs in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000604 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -257,10 +434,53 @@
 				AA0000000000000000000114 /* CameraControlPanel.swift in Sources */,
 				AA0000000000000000000115 /* SettingsScreen.swift in Sources */,
 				AA0000000000000000000116 /* LUTManagerScreen.swift in Sources */,
+				AA0000000000000000000118 /* SimulatedPixelBufferFactory.swift in Sources */,
+				AA0000000000000000000119 /* VideoFileFrameSource.swift in Sources */,
+				AA0000000000000000000130 /* MetalTextureBridge.swift in Sources */,
+				AA0000000000000000000131 /* MetalPreviewRenderer.swift in Sources */,
+				AA0000000000000000000132 /* MetalPreviewSurface.swift in Sources */,
+				AA0000000000000000000133 /* PreviewShaders.metal in Sources */,
+				AA0000000000000000000135 /* LUTStore.swift in Sources */,
+				AA0000000000000000000136 /* LUTPass.swift in Sources */,
+				AA0000000000000000000141 /* ColorTransformPass.swift in Sources */,
+				AA0000000000000000000142 /* FalseColorPass.swift in Sources */,
+				AA0000000000000000000143 /* ZebraPass.swift in Sources */,
+				AA0000000000000000000144 /* ScopeComputePass.swift in Sources */,
+				AA0000000000000000000145 /* MetalFrameProcessor.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000603 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000120 /* PixelBufferFixtureFactory.swift in Sources */,
+				AA0000000000000000000121 /* CubeFixtureFactory.swift in Sources */,
+				AA0000000000000000000122 /* CPUReference.swift in Sources */,
+				AA0000000000000000000123 /* PixelBufferFixtureFactoryTests.swift in Sources */,
+				AA0000000000000000000124 /* LUTParserTests.swift in Sources */,
+				AA0000000000000000000125 /* CameraExposureRulesTests.swift in Sources */,
+				AA0000000000000000000126 /* CameraCommandServiceTests.swift in Sources */,
+				AA0000000000000000000127 /* MockCameraTransportTests.swift in Sources */,
+				AA0000000000000000000128 /* CPUReferenceTests.swift in Sources */,
+				AA0000000000000000000129 /* FrameSourceStage2Tests.swift in Sources */,
+				AA0000000000000000000134 /* MetalTextureBridgeTests.swift in Sources */,
+				AA0000000000000000000137 /* LUTRepositoryTests.swift in Sources */,
+				AA0000000000000000000138 /* LUTPassTests.swift in Sources */,
+				AA0000000000000000000139 /* MetalLUTShaderTests.swift in Sources */,
+				AA0000000000000000000146 /* ScopeComputePassTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AA0000000000000000000B01 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000501 /* PrismBlade */;
+			targetProxy = AA0000000000000000000A01 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AA0000000000000000000801 /* Debug */ = {
@@ -416,6 +636,58 @@
 			};
 			name = Release;
 		};
+		AA0000000000000000000805 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chronus.PrismBladeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PrismBlade.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PrismBlade";
+			};
+			name = Debug;
+		};
+		AA0000000000000000000806 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chronus.PrismBladeTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PrismBlade.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PrismBlade";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -433,6 +705,15 @@
 			buildConfigurations = (
 				AA0000000000000000000803 /* Debug */,
 				AA0000000000000000000804 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000903 /* Build configuration list for PBXNativeTarget "PrismBladeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000805 /* Debug */,
+				AA0000000000000000000806 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

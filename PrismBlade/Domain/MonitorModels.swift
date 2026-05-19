@@ -8,6 +8,26 @@ struct MonitorSessionState: Equatable {
     var lut: LUTState = .initial
 }
 
+struct ScopeData: Equatable {
+    var lumaBins: [Float]
+    var redBins: [Float]
+    var greenBins: [Float]
+    var blueBins: [Float]
+    var binWidth: Int
+    var binHeight: Int
+    var sourceSequence: Int
+
+    var isValid: Bool {
+        let expectedCount = binWidth * binHeight
+        return binWidth > 0 &&
+            binHeight > 0 &&
+            lumaBins.count == expectedCount &&
+            redBins.count == expectedCount &&
+            greenBins.count == expectedCount &&
+            blueBins.count == expectedCount
+    }
+}
+
 enum ConnectionState: Equatable {
     case disconnected
     case searching
@@ -41,21 +61,29 @@ enum ConnectionState: Equatable {
 
 struct MonitorState: Equatable {
     var falseColorEnabled: Bool
+    var falseColorDefaultEnabled: Bool
     var zebraEnabled: Bool
+    var zebraDefaultEnabled: Bool
     var zebraMode: ZebraMode
     var zebraThreshold: Double
     var scopeMode: ScopeMode
     var scopeOpacity: Double
+    var scopeDockPosition: ScopeDockPosition
+    var exposureAnalysisSource: ExposureAnalysisSource
     var zoomMode: ZoomMode
     var previewFitMode: PreviewFitMode
 
     static let initial = MonitorState(
         falseColorEnabled: false,
+        falseColorDefaultEnabled: false,
         zebraEnabled: false,
+        zebraDefaultEnabled: false,
         zebraMode: .high,
         zebraThreshold: 90,
         scopeMode: .lumaWaveform,
         scopeOpacity: 0.72,
+        scopeDockPosition: .bottomLeft,
+        exposureAnalysisSource: .rawSignal,
         zoomMode: .fit,
         previewFitMode: .fit
     )
@@ -87,6 +115,53 @@ enum ScopeMode: String, CaseIterable, Identifiable, Equatable {
         case .off: return "Off"
         case .lumaWaveform: return "Waveform"
         case .rgbParade: return "RGB Parade"
+        }
+    }
+}
+
+enum ScopeDockPosition: String, CaseIterable, Identifiable, Equatable {
+    case bottomLeft
+    case bottomRight
+    case topLeft
+    case topRight
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .bottomLeft: return "Bottom Left"
+        case .bottomRight: return "Bottom Right"
+        case .topLeft: return "Top Left"
+        case .topRight: return "Top Right"
+        }
+    }
+
+    var isTop: Bool {
+        self == .topLeft || self == .topRight
+    }
+
+    var isLeading: Bool {
+        self == .bottomLeft || self == .topLeft
+    }
+}
+
+enum ExposureAnalysisSource: String, CaseIterable, Identifiable, Equatable {
+    case rawSignal
+    case previewDisplay
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .rawSignal: return "Raw Signal"
+        case .previewDisplay: return "Preview Display"
+        }
+    }
+
+    var compactTitle: String {
+        switch self {
+        case .rawSignal: return "Raw"
+        case .previewDisplay: return "LUT"
         }
     }
 }
