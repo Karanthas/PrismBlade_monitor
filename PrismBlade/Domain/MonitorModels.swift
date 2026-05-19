@@ -68,6 +68,7 @@ struct MonitorState: Equatable {
     var zebraThreshold: Double
     var scopeMode: ScopeMode
     var scopeOpacity: Double
+    var scopeDockPosition: ScopeDockPosition
     var exposureAnalysisSource: ExposureAnalysisSource
     var zoomMode: ZoomMode
     var previewFitMode: PreviewFitMode
@@ -81,6 +82,7 @@ struct MonitorState: Equatable {
         zebraThreshold: 90,
         scopeMode: .lumaWaveform,
         scopeOpacity: 0.72,
+        scopeDockPosition: .bottomLeft,
         exposureAnalysisSource: .rawSignal,
         zoomMode: .fit,
         previewFitMode: .fit
@@ -114,6 +116,32 @@ enum ScopeMode: String, CaseIterable, Identifiable, Equatable {
         case .lumaWaveform: return "Waveform"
         case .rgbParade: return "RGB Parade"
         }
+    }
+}
+
+enum ScopeDockPosition: String, CaseIterable, Identifiable, Equatable {
+    case bottomLeft
+    case bottomRight
+    case topLeft
+    case topRight
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .bottomLeft: return "Bottom Left"
+        case .bottomRight: return "Bottom Right"
+        case .topLeft: return "Top Left"
+        case .topRight: return "Top Right"
+        }
+    }
+
+    var isTop: Bool {
+        self == .topLeft || self == .topRight
+    }
+
+    var isLeading: Bool {
+        self == .bottomLeft || self == .topLeft
     }
 }
 

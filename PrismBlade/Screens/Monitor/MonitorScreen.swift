@@ -5,13 +5,16 @@ struct MonitorScreen: View {
     @State private var activeSheet: MonitorSheet?
     // v0.1.3 将参数浮层状态上移到父级，便于预览区点击关闭和 Scope 动态避让共享状态。
     @State private var selectedCameraParameter: CameraParameter?
+    @State private var scopeDragTranslation: CGSize = .zero
 
     var body: some View {
         GeometryReader { proxy in
             let isPortrait = proxy.size.height > proxy.size.width
             let usePortraitLayout = isPortrait && session.state.orientation.allowsPortraitMonitoring
-            // v0.1.2 要求 Scope 不再大面积遮挡画面，宽度固定为当前画面宽度的 40%。
-            let scopeWidth = proxy.size.width * 0.4
+            let scopeSize = CGSize(
+                width: proxy.size.width * (usePortraitLayout ? 0.54 : 0.42),
+                height: usePortraitLayout ? 118 : 132
+            )
             let hasParameterAdjuster = selectedCameraParameter != nil
             let controlsAvoidance = MonitorLayoutMetrics.controlStackAvoidance(hasAdjuster: hasParameterAdjuster)
 
@@ -37,22 +40,15 @@ struct MonitorScreen: View {
                 VStack(spacing: 0) {
                     statusBar
                     Spacer()
-                    if session.state.monitor.scopeMode != .off {
-                        HStack {
-                            // Scope 放在底部左侧，并预留底部控制条高度，避免和相机参数条重叠。
-                            ScopePanel(
-                                mode: session.state.monitor.scopeMode,
-                                opacity: session.state.monitor.scopeOpacity,
-                                analysisSource: session.state.monitor.exposureAnalysisSource,
-                                data: session.scopeData
-                            )
-                            .frame(width: scopeWidth, height: usePortraitLayout ? 118 : 132)
-                            .padding(.leading, usePortraitLayout ? 12 : 72)
-                            Spacer()
-                        }
-                        // Scope 根据底部控制条和调整浮层动态避让，避免 v0.1.2 中可能出现的重叠。
-                        .padding(.bottom, controlsAvoidance)
-                    }
+                }
+
+                if session.state.monitor.scopeMode != .off {
+                    scopeOverlay(
+                        proxy: proxy,
+                        scopeSize: scopeSize,
+                        controlsAvoidance: controlsAvoidance,
+                        usePortraitLayout: usePortraitLayout
+                    )
                 }
 
                 toolRails(usePortraitLayout: usePortraitLayout)
@@ -72,6 +68,7 @@ struct MonitorScreen: View {
             }
             .animation(.easeInOut(duration: 0.18), value: selectedCameraParameter)
             .animation(.easeInOut(duration: 0.18), value: session.lastUserMessage)
+            .animation(.easeInOut(duration: 0.18), value: session.state.monitor.scopeDockPosition)
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
                 case .settings:
@@ -81,6 +78,84 @@ struct MonitorScreen: View {
                 }
             }
         }
+    }
+
+    private func scopeOverlay(
+        proxy: GeometryProxy,
+        scopeSize: CGSize,
+        controlsAvoidance: CGFloat,
+        usePortraitLayout: Bool
+    ) -> some View {
+        let baseCenter = scopeCenter(
+            for: session.state.monitor.scopeDockPosition,
+            viewport: proxy.size,
+            safeAreaInsets: proxy.safeAreaInsets,
+            scopeSize: scopeSize,
+            controlsAvoidance: controlsAvoidance,
+            usePortraitLayout: usePortraitLayout
+        )
+        let draggedCenter = clampedScopeCenter(
+            CGPoint(
+                x: baseCenter.x + scopeDragTranslation.width,
+                y: baseCenter.y + scopeDragTranslation.height
+            ),
+            viewport: proxy.size,
+            safeAreaInsets: proxy.safeAreaInsets,
+            scopeSize: scopeSize,
+            controlsAvoidance: controlsAvoidance
+        )
+
+        return ScopePanel(
+            mode: session.state.monitor.scopeMode,
+            opacity: session.state.monitor.scopeOpacity,
+            analysisSource: session.state.monitor.exposureAnalysisSource,
+            data: session.scopeData
+        )
+        .frame(width: scopeSize.width, height: scopeSize.height)
+        .position(draggedCenter)
+        .gesture(
+            DragGesture(minimumDistance: 4)
+                .onChanged { value in
+                    let proposedCenter = CGPoint(
+                        x: baseCenter.x + value.translation.width,
+                        y: baseCenter.y + value.translation.height
+                    )
+                    let clampedCenter = clampedScopeCenter(
+                        proposedCenter,
+                        viewport: proxy.size,
+                        safeAreaInsets: proxy.safeAreaInsets,
+                        scopeSize: scopeSize,
+                        controlsAvoidance: controlsAvoidance
+                    )
+                    scopeDragTranslation = CGSize(
+                        width: clampedCenter.x - baseCenter.x,
+                        height: clampedCenter.y - baseCenter.y
+                    )
+                }
+                .onEnded { value in
+                    let proposedCenter = CGPoint(
+                        x: baseCenter.x + value.translation.width,
+                        y: baseCenter.y + value.translation.height
+                    )
+                    let clampedCenter = clampedScopeCenter(
+                        proposedCenter,
+                        viewport: proxy.size,
+                        safeAreaInsets: proxy.safeAreaInsets,
+                        scopeSize: scopeSize,
+                        controlsAvoidance: controlsAvoidance
+                    )
+                    let nearestDock = nearestScopeDockPosition(
+                        to: clampedCenter,
+                        viewport: proxy.size,
+                        safeAreaInsets: proxy.safeAreaInsets,
+                        scopeSize: scopeSize,
+                        controlsAvoidance: controlsAvoidance,
+                        usePortraitLayout: usePortraitLayout
+                    )
+                    scopeDragTranslation = .zero
+                    session.setScopeDockPosition(nearestDock)
+                }
+        )
     }
 
     private var statusBar: some View {
@@ -168,6 +243,96 @@ struct MonitorScreen: View {
         .accessibilityLabel(title)
     }
 
+    private func scopeCenter(
+        for position: ScopeDockPosition,
+        viewport: CGSize,
+        safeAreaInsets: EdgeInsets,
+        scopeSize: CGSize,
+        controlsAvoidance: CGFloat,
+        usePortraitLayout: Bool
+    ) -> CGPoint {
+        let horizontalInset = scopeHorizontalInset(for: position, usePortraitLayout: usePortraitLayout)
+        let x = position.isLeading
+            ? horizontalInset + scopeSize.width / 2
+            : viewport.width - horizontalInset - scopeSize.width / 2
+        let y = position.isTop
+            ? scopeTopInset(safeAreaInsets: safeAreaInsets) + scopeSize.height / 2
+            : viewport.height - controlsAvoidance - scopeSize.height / 2
+
+        return clampedScopeCenter(
+            CGPoint(x: x, y: y),
+            viewport: viewport,
+            safeAreaInsets: safeAreaInsets,
+            scopeSize: scopeSize,
+            controlsAvoidance: controlsAvoidance
+        )
+    }
+
+    private func nearestScopeDockPosition(
+        to center: CGPoint,
+        viewport: CGSize,
+        safeAreaInsets: EdgeInsets,
+        scopeSize: CGSize,
+        controlsAvoidance: CGFloat,
+        usePortraitLayout: Bool
+    ) -> ScopeDockPosition {
+        ScopeDockPosition.allCases.min { lhs, rhs in
+            let lhsCenter = scopeCenter(
+                for: lhs,
+                viewport: viewport,
+                safeAreaInsets: safeAreaInsets,
+                scopeSize: scopeSize,
+                controlsAvoidance: controlsAvoidance,
+                usePortraitLayout: usePortraitLayout
+            )
+            let rhsCenter = scopeCenter(
+                for: rhs,
+                viewport: viewport,
+                safeAreaInsets: safeAreaInsets,
+                scopeSize: scopeSize,
+                controlsAvoidance: controlsAvoidance,
+                usePortraitLayout: usePortraitLayout
+            )
+            return squaredDistance(from: center, to: lhsCenter) < squaredDistance(from: center, to: rhsCenter)
+        } ?? .bottomLeft
+    }
+
+    private func clampedScopeCenter(
+        _ center: CGPoint,
+        viewport: CGSize,
+        safeAreaInsets: EdgeInsets,
+        scopeSize: CGSize,
+        controlsAvoidance: CGFloat
+    ) -> CGPoint {
+        let minimumX = 12 + scopeSize.width / 2
+        let maximumX = max(minimumX, viewport.width - 12 - scopeSize.width / 2)
+        let minimumY = scopeTopInset(safeAreaInsets: safeAreaInsets) + scopeSize.height / 2
+        let maximumY = max(minimumY, viewport.height - controlsAvoidance - scopeSize.height / 2)
+
+        return CGPoint(
+            x: min(max(center.x, minimumX), maximumX),
+            y: min(max(center.y, minimumY), maximumY)
+        )
+    }
+
+    private func scopeHorizontalInset(for position: ScopeDockPosition, usePortraitLayout: Bool) -> CGFloat {
+        if position.isTop {
+            return usePortraitLayout ? 64 : 72
+        }
+
+        return usePortraitLayout ? 12 : 72
+    }
+
+    private func scopeTopInset(safeAreaInsets: EdgeInsets) -> CGFloat {
+        max(safeAreaInsets.top + 10, MonitorLayoutMetrics.statusBarHeight + 10)
+    }
+
+    private func squaredDistance(from lhs: CGPoint, to rhs: CGPoint) -> CGFloat {
+        let dx = lhs.x - rhs.x
+        let dy = lhs.y - rhs.y
+        return dx * dx + dy * dy
+    }
+
     private func cycleScopeMode() {
         let modes = ScopeMode.allCases
         let currentIndex = modes.firstIndex(of: session.state.monitor.scopeMode) ?? 0
@@ -208,6 +373,7 @@ private enum MonitorSheet: String, Identifiable {
 }
 
 enum MonitorLayoutMetrics {
+    static let statusBarHeight: CGFloat = 36
     static let controlBarBottomPadding: CGFloat = 8
     static let controlBarHeight: CGFloat = 60
     static let controlPanelSpacing: CGFloat = 8

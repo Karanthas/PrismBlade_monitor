@@ -40,7 +40,13 @@ final class ScopeComputePass {
             self.maxSampleHeight = maxSampleHeight
         }
 
-        static let `default` = Configuration(binWidth: 96, binHeight: 64, frameInterval: 3)
+        static let `default` = Configuration(
+            binWidth: 192,
+            binHeight: 96,
+            frameInterval: 3,
+            maxSampleWidth: 640,
+            maxSampleHeight: 360
+        )
     }
 
     private let device: MTLDevice
@@ -240,8 +246,20 @@ final class ScopeComputePass {
             return Array(repeating: 0, count: count)
         }
 
-        let scale = Float(maximum)
-        return values.map { Float($0) / scale }
+        return Self.normalizedCounts(values, maximum: maximum)
+    }
+
+    static func normalizedCounts(_ values: [UInt32], maximum: UInt32? = nil) -> [Float] {
+        let resolvedMaximum = maximum ?? values.max() ?? 0
+        guard resolvedMaximum > 0 else {
+            return Array(repeating: 0, count: values.count)
+        }
+
+        let scale = log1p(Float(resolvedMaximum))
+        return values.map { value in
+            guard value > 0 else { return 0 }
+            return log1p(Float(value)) / scale
+        }
     }
 
     private func exposureAnalysisSourceCode(for source: ExposureAnalysisSource) -> Float {

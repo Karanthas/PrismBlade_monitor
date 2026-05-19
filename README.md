@@ -1,12 +1,12 @@
 # PrismBlade
 
-**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch has moved from the `v0.2.1` Metal-first vertical slice into the `v0.2.2` N-Log / LUT exposure-chain correction. The project now has a real `CVPixelBuffer` media frame model, a BGRA simulated frame source, an `AVAssetReader` video-file frame source, a `CVPixelBuffer -> MTLTexture -> MTKView drawable` Metal preview loop, display-only 3D LUT sampling, explicit raw / preview / analysis signal separation, shader-based false color / zebra exposure assists, and Metal compute scope bins for Luma waveform / RGB Parade.
+**PrismBlade** is an iOS camera monitoring prototype for a Nikon Z6III workflow. The current branch has moved from the `v0.2.2` N-Log / LUT exposure-chain correction into the `v0.2.3` scope readability pass. The project now has a real `CVPixelBuffer` media frame model, a BGRA simulated frame source, an `AVAssetReader` video-file frame source, a `CVPixelBuffer -> MTLTexture -> MTKView drawable` Metal preview loop, display-only 3D LUT sampling, explicit raw / preview / analysis signal separation, shader-based false color / zebra exposure assists, and higher-resolution Metal compute scope bins for Luma waveform / RGB Parade.
 
 > Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
 ## Status
 
-This repository currently contains a simulator-ready SwiftUI prototype plus the `v0.2.1` Stage 3 Metal preview loop, Stage 4 LUT rendering path, Stage 5 exposure-assist slice, Stage 6 Metal compute scope path, and the `v0.2.2` N-Log LUT input / exposure-analysis-source correction. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
+This repository currently contains a simulator-ready SwiftUI prototype plus the `v0.2.1` Stage 3 Metal preview loop, Stage 4 LUT rendering path, Stage 5 exposure-assist slice, Stage 6 Metal compute scope path, the `v0.2.2` N-Log LUT input / exposure-analysis-source correction, and the `v0.2.3` scope readability update. It does **not** connect to a real Nikon camera, does **not** implement USB/PTP transport, and does **not** port `libgphoto2`.
 
 The app is intentionally built around replaceable boundaries:
 
@@ -42,6 +42,9 @@ The app is intentionally built around replaceable boundaries:
 - Shader-based false color using the selected analysis signal.
 - Shader-based high zebra and range zebra masks using the selected analysis signal and the settings threshold.
 - Metal compute Luma waveform and RGB Parade scope bins, displayed by `ScopePanel` instead of generated placeholder curves; scope analysis follows the selected raw or preview analysis source and excludes false-color / zebra overlays.
+- `v0.2.3` scope readability updates: default scope bins are `192 x 96`, sample limits are `640 x 360`, and bin readback uses `log1p` density normalization so low-density waveform detail remains visible.
+- White Luma waveform drawing with low-contrast white grid lines; RGB Parade remains red / green / blue.
+- Scope title includes both mode and analysis source, for example `Waveform · Raw` or `RGB Parade · LUT`.
 - Scope compute dispatch uses explicit threadgroup-grid sizing instead of `dispatchThreads`, improving compatibility across iOS Simulator and different Metal GPU families while preserving the same sampled pixels.
 - `MetalFrameProcessor` centralizes LUT preview resolution, shader uniform generation, and the raw / preview / analysis state used by scope compute.
 - `LUTPass` conversion from parsed `.cube` entries to `.rgba32Float` 3D `MTLTexture` resources.
@@ -52,8 +55,9 @@ The app is intentionally built around replaceable boundaries:
 - Left and right floating tool rails.
 - False color toggle wired to the Metal preview shader.
 - Zebra toggle with threshold settings wired to the Metal preview shader.
-- Compact Luma waveform overlay at 40% of the monitor width.
-- Compact RGB Parade overlay at 40% of the monitor width.
+- Compact Luma waveform overlay using about 42% of landscape width or 54% of portrait width.
+- Compact RGB Parade overlay using the same dockable scope panel.
+- Scope overlay drag-and-snap docking to Bottom Left, Bottom Right, Top Left, and Top Right, with the selected dock persisted through `UserDefaults`.
 - Zoom mode cycling: fit, fill, 1x, 2x.
 - Bottom camera control bar for monitoring-first operation.
 - Click-to-adjust discrete sliders for exposure mode, aperture, shutter, ISO, white balance, and focus mode.
@@ -71,7 +75,7 @@ The app is intentionally built around replaceable boundaries:
 - `.cube` parser with validation for `TITLE`, `LUT_3D_SIZE`, `DOMAIN_MIN`, `DOMAIN_MAX`, comments, and RGB data rows.
 - Optional local LUT directory support through `PrismBlade/Resources/LUTs`; ignored vendor LUT files are shown only when present and parseable.
 - LUT metadata persistence through a JSON index in the app documents directory.
-- Settings screen with portrait-monitoring permission, false-color / zebra default-on preferences, zebra threshold, scope opacity, scope mode, exposure analysis source, and mock debug actions.
+- Settings screen with portrait-monitoring permission, false-color / zebra default-on preferences, zebra threshold, scope opacity, scope mode, scope dock position, exposure analysis source, and mock debug actions.
 - Mock Nikon Z6III camera controls:
   - Exposure mode
   - Aperture
@@ -82,7 +86,7 @@ The app is intentionally built around replaceable boundaries:
   - Record toggle
   - Capture action
   - Focus action
-- XCTest target for `v0.2.1` Stages 1-6 plus `v0.2.2` exposure-chain regression coverage:
+- XCTest target for `v0.2.1` Stages 1-6, `v0.2.2` exposure-chain regression coverage, and `v0.2.3` scope readability coverage:
   - Pixel buffer fixture generation for small BGRA test images.
   - `.cube` fixture generation for valid and invalid LUT cases.
   - CPU reference helpers for luma, LUT sampling, zebra masks, and waveform bins.
@@ -95,7 +99,7 @@ The app is intentionally built around replaceable boundaries:
   - `LUTPass` tests for 3D texture upload order, domain preservation, and texture format.
   - `ColorTransformPass` reference tests for generated Rec.709 / N-Log / HLG inputs.
   - `MetalLUTShaderTests` offscreen-render coverage for LUT intensity blending, N-Log raw output when LUT is disabled, raw N-Log LUT sampling, raw/LUT-output mixing, generated gray-ramp false color, and raw/preview zebra and false-color analysis behavior.
-  - `ScopeComputePassTests` coverage for waveform / RGB Parade bins, readback throttling, raw N-Log scope analysis, and preview-display scope analysis.
+  - `ScopeComputePassTests` coverage for waveform / RGB Parade bins, readback throttling, raw N-Log scope analysis, preview-display scope analysis, new default bin/sample configuration, and non-linear density normalization.
 
 ## What Is Not Implemented Yet
 
@@ -155,6 +159,7 @@ PrismBlade/
     ColorTransformPass.swift
     FalseColorPass.swift
     ZebraPass.swift
+    ScopeComputePass.swift
     PreviewShaders.metal
   Imaging/
     LUTParser.swift
@@ -213,6 +218,7 @@ Metal Preview
   -> ColorTransformPass
   -> FalseColorPass
   -> ZebraPass
+  -> ScopeComputePass
   -> PreviewShaders.metal
 
 Imaging
@@ -268,9 +274,9 @@ Expected result:
 ** BUILD SUCCEEDED **
 ```
 
-### Run Stage 3-6 and v0.2.2 Tests
+### Run Stage 3-6 and v0.2.3 Tests
 
-Stage 3 moves the main preview from SwiftUI synthetic drawing to an `MTKView`. Stage 4 adds real LUT texture upload and fragment-shader LUT sampling. Stage 5 adds shader-based false color and zebra. Stage 6 adds Metal compute bins for Luma waveform and RGB Parade. The `v0.2.2` correction keeps N-Log LUT sampling on the raw input signal and lets exposure tools analyze either Raw Signal or Preview Display. The effect you should verify is that the test target builds and the simulated frame source, video-file frame source, Metal texture bridge, LUT repository, LUT pass, Metal shader, exposure analysis, and scope compute tests pass.
+Stage 3 moves the main preview from SwiftUI synthetic drawing to an `MTKView`. Stage 4 adds real LUT texture upload and fragment-shader LUT sampling. Stage 5 adds shader-based false color and zebra. Stage 6 adds Metal compute bins for Luma waveform and RGB Parade. The `v0.2.2` correction keeps N-Log LUT sampling on the raw input signal and lets exposure tools analyze either Raw Signal or Preview Display. The `v0.2.3` update improves scope readability with larger bins, `log1p` density normalization, a white Luma waveform, explicit analysis-source titles, and draggable dock positions. The effect you should verify is that the test target builds and the simulated frame source, video-file frame source, Metal texture bridge, LUT repository, LUT pass, Metal shader, exposure analysis, and scope compute tests pass.
 
 #### Option A: Xcode
 
@@ -341,7 +347,7 @@ Expected result:
 ** TEST EXECUTE SUCCEEDED **
 ```
 
-The current suite contains 58 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
+The current suite contains 60 tests. A successful run prints each test case and ends with `TEST EXECUTE SUCCEEDED`.
 
 ### Local Real Materials
 
@@ -390,9 +396,9 @@ Use the floating tool buttons to toggle monitor assists:
 - Magnifier icon: cycles zoom mode.
 - Gear icon: opens settings.
 
-The scope panel is intentionally compact in `v0.1.3`: waveform and RGB Parade use about 40% of the screen width so they do not dominate the monitored image. When the camera parameter adjustment panel is open, the scope panel moves upward to avoid overlapping the bottom controls.
+The scope panel is intentionally compact: waveform and RGB Parade use about 42% of landscape width or 54% of portrait width so they do not dominate the monitored image. The default dock is Bottom Left. You can drag the panel freely within safe bounds; when released, it snaps to the nearest allowed dock: Bottom Left, Bottom Right, Top Left, or Top Right. The selected dock is persisted and is also available in Settings. When the camera parameter adjustment panel is open, bottom dock positions move upward to avoid overlapping the bottom controls.
 
-Starting in Stage 3, the main preview is drawn by `MTKView`: `VideoFrame.pixelBuffer` is bridged through `CVMetalTextureCache` into `MTLTexture`, then sampled by `PreviewShaders.metal` into the drawable. Stage 4 binds a 3D LUT texture and mixes LUT output by intensity in the fragment shader. Stage 5 sends exposure-assist state into the shader. Stage 6 adds a throttled compute side path that reads the same source texture and produces compact `ScopeData` bins. `v0.2.2` removes the old implicit “decode N-Log before LUT” path: Rec.709 displays directly, N-Log LUT Preview samples raw N-Log code values, and exposure tools explicitly analyze either Raw Signal or Preview Display.
+Starting in Stage 3, the main preview is drawn by `MTKView`: `VideoFrame.pixelBuffer` is bridged through `CVMetalTextureCache` into `MTLTexture`, then sampled by `PreviewShaders.metal` into the drawable. Stage 4 binds a 3D LUT texture and mixes LUT output by intensity in the fragment shader. Stage 5 sends exposure-assist state into the shader. Stage 6 adds a throttled compute side path that reads the same source texture and produces compact `ScopeData` bins. `v0.2.2` removes the old implicit “decode N-Log before LUT” path: Rec.709 displays directly, N-Log LUT Preview samples raw N-Log code values, and exposure tools explicitly analyze either Raw Signal or Preview Display. `v0.2.3` keeps that signal policy intact and only changes scope resolution, normalization, drawing, labeling, and docking.
 
 ```text
 source texture
@@ -409,9 +415,9 @@ source texture
   -> ScopePanel
 ```
 
-The scope overlay now draws `ScopeData` bins from Metal compute. If readback is delayed, SwiftUI keeps displaying the previous scope data while preview rendering continues.
+The scope overlay now draws `ScopeData` bins from Metal compute. If readback is delayed, SwiftUI keeps displaying the previous scope data while preview rendering continues. Luma waveform is drawn in white and titled with the selected analysis source, while RGB Parade keeps separate red, green, and blue channel regions.
 
-`ScopeComputePass` dispatches whole threadgroups and lets the shader guard discard edge threads outside the sampled region. This avoids simulator-sensitive `dispatchThreads` behavior and remains compatible with devices that do not support non-uniform threadgroups.
+`ScopeComputePass` dispatches whole threadgroups and lets the shader guard discard edge threads outside the sampled region. This avoids simulator-sensitive `dispatchThreads` behavior and remains compatible with devices that do not support non-uniform threadgroups. The default configuration is now `192 x 96` bins, `frameInterval = 3`, and `640 x 360` max sampling. CPU readback maps counts with `log1p(count) / log1p(maximum)` instead of linear max normalization.
 
 ### LUT Import
 
@@ -483,8 +489,10 @@ Important implementation decisions are documented with inline comments in the Sw
 - Why N-Log LUT preview samples raw input code values rather than an automatically decoded display-space value.
 - Why exposure analysis can use Raw Signal or Preview Display, and why Raw Signal is the default.
 - Why generated gray / clipping inputs are enough for automated shader checks but do not replace real Nikon calibration materials.
-- Why the scope overlay is constrained to 40% width.
-- Why the scope overlay uses dynamic bottom avoidance when the parameter adjustment panel is open.
+- Why the scope overlay uses a compact `v0.2.3` size instead of a half-screen scope.
+- Why the scope overlay supports four persisted dock positions and dynamic bottom avoidance when the parameter adjustment panel is open.
+- Why Luma waveform is drawn white and RGB Parade keeps separate RGB colors.
+- Why scope bin counts use non-linear density normalization for readability.
 - Why scope compute uses explicit `dispatchThreadgroups` sizing for simulator and GPU-family compatibility.
 
 The code intentionally favors reviewable boundaries over early performance optimization. Many comments are inline because this project is still shaping the real camera and rendering contracts.
@@ -502,9 +510,10 @@ And checked with:
 ```sh
 /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild build ...
 /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild build-for-testing ...
+/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test ... -only-testing:PrismBladeTests/ScopeComputePassTests
 ```
 
-The app build and simulator test build succeeded. Full XCTest execution requires a concrete simulator and working CoreSimulator / `testmanagerd` services. The normal `.metal` compilation path depends on the installed Metal Toolchain. In restricted shells, Xcode may not see the cryptex-mounted Metal Toolchain or may print CoreSimulator logging permission warnings; run from Terminal or Xcode directly if the sandbox cannot access the Metal Toolchain, CoreSimulator, or `testmanagerd`.
+The app build, simulator test build, and focused `ScopeComputePassTests` run succeeded on an available iPhone Simulator. Full XCTest execution requires a concrete simulator and working CoreSimulator / `testmanagerd` services. The normal `.metal` compilation path depends on the installed Metal Toolchain. In restricted shells, Xcode may not see the cryptex-mounted Metal Toolchain or may print CoreSimulator logging permission warnings; run from Terminal or Xcode directly if the sandbox cannot access the Metal Toolchain, CoreSimulator, or `testmanagerd`.
 
 ## Next Steps
 
@@ -524,9 +533,10 @@ Recommended next development steps:
    - Preview Display remains available for checking LUT-output waveform / zebra / false-color behavior.
 
 3. Deepen scope validation.
-   - Add reduced-resolution sampling options for heavier real footage.
+   - Manually validate the `v0.2.3` white waveform, `192 x 96` bins, and four-position drag snapping with `material/REC709.MOV`, `material/NLOG.MOV`, and `material/HLG.MOV`.
+   - Add reduced-resolution or high-quality sampling options for heavier real footage.
    - Compare Luma waveform and RGB Parade against reference screenshots.
-   - Tune bin dimensions and analysis interval on iPhone 12 Pro hardware.
+   - Tune bin dimensions, opacity curves, and analysis interval on iPhone 12 Pro hardware.
    - Add frame skipping to protect simulator and iPhone 12 Pro performance.
 
 4. Continue expanding tests with each rendering slice.
@@ -547,6 +557,7 @@ Recommended next development steps:
 ## Reference Documents
 
 - [Prototype Design](PROTOTYPE_DESIGN.md)
+- [Technical Spec v0.2.3](TECHNICAL_SPEC_v0.2.3.md)
 - [Technical Spec v0.2.2](TECHNICAL_SPEC_v0.2.2.md)
 - [Technical Spec v0.2.1](TECHNICAL_SPEC_v0.2.1.md)
 - [Test Plan v0.2.1](TEST_PLAN_v0.2.1.md)

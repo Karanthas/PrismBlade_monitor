@@ -9,12 +9,9 @@ struct ScopePanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(mode.title)
+                Text("\(mode.title) · \(analysisSource.compactTitle)")
                     .font(.caption.weight(.bold))
                 Spacer()
-                Text(analysisSource.compactTitle)
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.68))
             }
 
             Canvas { context, size in
@@ -61,7 +58,8 @@ struct ScopePanel: View {
             binWidth: data.binWidth,
             binHeight: data.binHeight,
             rect: CGRect(origin: .zero, size: size),
-            color: .green,
+            color: .white,
+            minimumOpacity: 0.18,
             context: context
         )
     }
@@ -87,6 +85,7 @@ struct ScopePanel: View {
                     height: size.height
                 ),
                 color: channels[channel].color,
+                minimumOpacity: 0.20,
                 context: context
             )
         }
@@ -98,6 +97,7 @@ struct ScopePanel: View {
         binHeight: Int,
         rect: CGRect,
         color: Color,
+        minimumOpacity: Double,
         context: GraphicsContext
     ) {
         guard binWidth > 0, binHeight > 0, bins.count == binWidth * binHeight else {
@@ -114,13 +114,15 @@ struct ScopePanel: View {
 
                 let x = rect.minX + CGFloat(column) * cellWidth
                 let y = rect.maxY - CGFloat(row + 1) * cellHeight
-                let opacity = 0.18 + intensity * 0.78
+                let opacity = minimumOpacity + intensity * (1 - minimumOpacity)
+                let insetX = cellWidth >= 2 ? 0.5 : 0
+                let insetY = cellHeight >= 2 ? 0.5 : 0
                 context.fill(
                     Path(CGRect(
-                        x: x,
-                        y: y,
-                        width: max(cellWidth, 1),
-                        height: max(cellHeight, 1)
+                        x: x + insetX,
+                        y: y + insetY,
+                        width: max(cellWidth - insetX * 2, 1),
+                        height: max(cellHeight - insetY * 2, 1)
                     )),
                     with: .color(color.opacity(opacity))
                 )

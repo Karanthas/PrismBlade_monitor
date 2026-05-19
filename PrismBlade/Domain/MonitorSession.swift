@@ -120,6 +120,11 @@ final class MonitorSession: ObservableObject {
         defaults.set(opacity, forKey: DefaultsKey.scopeOpacity)
     }
 
+    func setScopeDockPosition(_ position: ScopeDockPosition) {
+        state.monitor.scopeDockPosition = position
+        defaults.set(position.rawValue, forKey: DefaultsKey.scopeDockPosition)
+    }
+
     func setExposureAnalysisSource(_ source: ExposureAnalysisSource) {
         state.monitor.exposureAnalysisSource = source
         defaults.set(source.rawValue, forKey: DefaultsKey.exposureAnalysisSource)
@@ -336,6 +341,11 @@ final class MonitorSession: ObservableObject {
             state.monitor.scopeOpacity = opacity
         }
 
+        if let rawScopeDockPosition = defaults.string(forKey: DefaultsKey.scopeDockPosition),
+           let position = ScopeDockPosition(rawValue: rawScopeDockPosition) {
+            state.monitor.scopeDockPosition = position
+        }
+
         if let rawAnalysisSource = defaults.string(forKey: DefaultsKey.exposureAnalysisSource),
            let source = ExposureAnalysisSource(rawValue: rawAnalysisSource) {
             state.monitor.exposureAnalysisSource = source
@@ -392,6 +402,7 @@ private enum DefaultsKey {
     static let zebraThreshold = "PrismBlade.zebraThreshold"
     static let scopeMode = "PrismBlade.scopeMode"
     static let scopeOpacity = "PrismBlade.scopeOpacity"
+    static let scopeDockPosition = "PrismBlade.scopeDockPosition"
     static let exposureAnalysisSource = "PrismBlade.exposureAnalysisSource"
     static let selectedLUTID = "PrismBlade.selectedLUTID"
     static let lutIntensity = "PrismBlade.lutIntensity"

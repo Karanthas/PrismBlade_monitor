@@ -1,9 +1,38 @@
 @testable import PrismBlade
 import CoreMedia
+import Foundation
 import Metal
 import XCTest
 
 final class ScopeComputePassTests: XCTestCase {
+    func testDefaultConfigurationMatchesScopeReadabilityTarget() {
+        let configuration = ScopeComputePass.Configuration.default
+
+        XCTAssertEqual(configuration.binWidth, 192)
+        XCTAssertEqual(configuration.binHeight, 96)
+        XCTAssertEqual(configuration.frameInterval, 3)
+        XCTAssertEqual(configuration.maxSampleWidth, 640)
+        XCTAssertEqual(configuration.maxSampleHeight, 360)
+    }
+
+    func testNormalizedBinsUseLogDensityMapping() {
+        let counts: [UInt32] = [0, 1, 4, 16, 256]
+        let normalized = ScopeComputePass.normalizedCounts(counts)
+
+        XCTAssertEqual(normalized[0], 0)
+        XCTAssertEqual(normalized[4], 1, accuracy: 0.0001)
+
+        for index in 1..<normalized.count {
+            XCTAssertGreaterThan(normalized[index], normalized[index - 1])
+        }
+
+        let maximum = Float(counts.last ?? 1)
+        for index in 1..<(counts.count - 1) {
+            let linear = Float(counts[index]) / maximum
+            XCTAssertGreaterThan(normalized[index], linear)
+        }
+    }
+
     func testGrayRampProducesWaveformBinsByColumn() throws {
         let environment = try makeEnvironment()
         let texture = try makeTexture(

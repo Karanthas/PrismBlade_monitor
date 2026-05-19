@@ -66,6 +66,15 @@ struct SettingsScreen: View {
                         }
                     }
 
+                    Picker("位置", selection: Binding(
+                        get: { session.state.monitor.scopeDockPosition },
+                        set: { session.setScopeDockPosition($0) }
+                    )) {
+                        ForEach(ScopeDockPosition.allCases) { position in
+                            Text(position.title).tag(position)
+                        }
+                    }
+
                     VStack(alignment: .leading) {
                         Text("透明度 \(Int(session.state.monitor.scopeOpacity * 100))%")
                         Slider(
