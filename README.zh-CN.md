@@ -556,6 +556,7 @@ App 构建、模拟器测试构建和聚焦的 `ScopeComputePassTests` 均已在
 
 ## 参考文档
 
+- [v0.2 版本总结](V0.2_SUMMARY.zh-CN.md)
 - [原型设计](PROTOTYPE_DESIGN.md)
 - [技术文档 v0.2.3](TECHNICAL_SPEC_v0.2.3.md)
 - [技术文档 v0.2.2](TECHNICAL_SPEC_v0.2.2.md)
