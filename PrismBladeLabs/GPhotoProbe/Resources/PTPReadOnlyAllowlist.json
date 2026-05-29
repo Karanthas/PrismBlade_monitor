@@ -1,0 +1,27 @@
+[
+  {
+    "command": "getDeviceInfo",
+    "operationCode": 4097,
+    "readOnlyRationale": "Standard PTP device information read.",
+    "dataPhasePolicy": "inboundDataExpected",
+    "expectedResponseHandling": "Accept OK response with optional data payload; classify unsupported separately.",
+    "unknownVendorOperationClassification": "inconclusive"
+  },
+  {
+    "command": "getDevicePropDesc",
+    "operationCode": 4116,
+    "readOnlyRationale": "Standard PTP device property descriptor read.",
+    "dataPhasePolicy": "inboundDataExpected",
+    "expectedResponseHandling": "Accept OK response with property descriptor data; unsupported properties are inconclusive.",
+    "unknownVendorOperationClassification": "inconclusive"
+  },
+  {
+    "command": "getDevicePropValue",
+    "operationCode": 4117,
+    "readOnlyRationale": "Standard PTP device property value read.",
+    "dataPhasePolicy": "inboundDataExpected",
+    "expectedResponseHandling": "Accept OK response with property value data; unsupported properties are inconclusive.",
+    "unknownVendorOperationClassification": "inconclusive"
+  }
+]
+
