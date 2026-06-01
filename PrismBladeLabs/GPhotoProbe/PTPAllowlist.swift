@@ -920,22 +920,112 @@ private struct PTPPayloadCursor {
         case 0x5001:
             guard let unsigned else { return fallback }
             return "\(unsigned)%"
+        case 0x5005:
+            guard let unsigned else { return fallback }
+            return Self.mappedUnsignedValue(unsigned, names: [
+                0x0001: "Manual",
+                0x0002: "Auto",
+                0x0003: "One-push auto",
+                0x0004: "Daylight",
+                0x0005: "Fluorescent",
+                0x0006: "Tungsten",
+                0x0007: "Flash"
+            ])
         case 0x5007:
             guard let unsigned else { return fallback }
             return "f/\(Self.formatDecimal(Double(unsigned) / 100.0))"
+        case 0x500A:
+            guard let unsigned else { return fallback }
+            return Self.mappedUnsignedValue(unsigned, names: [
+                0x0001: "Manual",
+                0x0002: "Auto",
+                0x0003: "Auto macro"
+            ])
+        case 0x500B:
+            guard let unsigned else { return fallback }
+            return Self.mappedUnsignedValue(unsigned, names: [
+                0x0001: "Average",
+                0x0002: "Center-weighted average",
+                0x0003: "Multi-spot",
+                0x0004: "Multi-segment",
+                0x0005: "Center spot"
+            ])
+        case 0x500D:
+            guard let unsigned else { return fallback }
+            return Self.exposureTimeDisplay(unsigned)
+        case 0x500E:
+            guard let unsigned else { return fallback }
+            return Self.mappedUnsignedValue(unsigned, names: [
+                0x0001: "Manual",
+                0x0002: "Auto",
+                0x0003: "Aperture priority",
+                0x0004: "Shutter priority",
+                0x0005: "Creative",
+                0x0006: "Action",
+                0x0007: "Portrait",
+                0x0008: "Landscape"
+            ])
         case 0x500F:
             guard let unsigned else { return fallback }
             return "ISO \(unsigned)"
+        case 0x5010:
+            if let signed {
+                return Self.exposureBiasDisplay(signed)
+            }
+            guard let unsigned else { return fallback }
+            return Self.exposureBiasDisplay(Int64(unsigned))
+        case 0x5013:
+            guard let unsigned else { return fallback }
+            return Self.mappedUnsignedValue(unsigned, names: [
+                0x0001: "Single shot",
+                0x0002: "Burst",
+                0x0003: "Timelapse"
+            ])
         default:
             return fallback
         }
     }
 
-    private static func formatDecimal(_ value: Double) -> String {
-        if value.rounded() == value {
-            return "\(Int(value))"
+    private static func mappedUnsignedValue(_ value: UInt64, names: [UInt64: String]) -> String {
+        if let name = names[value] {
+            return name
         }
-        return String(format: "%.1f", value)
+        if value >= 0x8000 {
+            return "Vendor(\(PTPDeviceInfoParser.hex(UInt32(truncatingIfNeeded: value))))"
+        }
+        return "\(value)"
+    }
+
+    private static func exposureTimeDisplay(_ rawValue: UInt64) -> String {
+        guard rawValue > 0 else { return "0 s" }
+        let seconds = Double(rawValue) / 10_000.0
+        if seconds >= 1 {
+            return "\(formatDecimal(seconds, maximumFractionDigits: 3)) s"
+        }
+
+        let denominator = 1.0 / seconds
+        if denominator.rounded() == denominator {
+            return "1/\(Int(denominator)) s"
+        }
+        return "\(formatDecimal(seconds, maximumFractionDigits: 4)) s"
+    }
+
+    private static func exposureBiasDisplay(_ rawValue: Int64) -> String {
+        let ev = Double(rawValue) / 1_000.0
+        let sign = ev > 0 ? "+" : ""
+        return "\(sign)\(formatDecimal(ev, maximumFractionDigits: 3)) EV"
+    }
+
+    private static func formatDecimal(_ value: Double, maximumFractionDigits: Int = 1) -> String {
+        let normalizedValue = abs(value) < 0.0005 ? 0 : value
+        var text = String(format: "%.\(maximumFractionDigits)f", normalizedValue)
+        while text.contains(".") && text.last == "0" {
+            text.removeLast()
+        }
+        if text.last == "." {
+            text.removeLast()
+        }
+        return text
     }
 
     private func hex(_ data: Data) -> String {

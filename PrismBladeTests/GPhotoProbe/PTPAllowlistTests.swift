@@ -162,6 +162,59 @@ final class PTPAllowlistTests: XCTestCase {
         XCTAssertEqual(value.display, "f/5.6")
     }
 
+    func testDevicePropValueParserDisplaysCommonStandardEnumsAndVendorValues() throws {
+        XCTAssertEqual(
+            try Self.parseUInt16Property(2, propertyCode: 0x5005).display,
+            "Auto"
+        )
+        XCTAssertEqual(
+            try Self.parseUInt16Property(0x8010, propertyCode: 0x500A).display,
+            "Vendor(0x8010)"
+        )
+        XCTAssertEqual(
+            try Self.parseUInt16Property(3, propertyCode: 0x500B).display,
+            "Multi-spot"
+        )
+        XCTAssertEqual(
+            try Self.parseUInt16Property(3, propertyCode: 0x500E).display,
+            "Aperture priority"
+        )
+        XCTAssertEqual(
+            try Self.parseUInt16Property(1, propertyCode: 0x5013).display,
+            "Single shot"
+        )
+    }
+
+    func testDevicePropValueParserDisplaysExposureTimeAndBias() throws {
+        var exposureTime = Data()
+        exposureTime.appendLittleEndian(UInt32(150_000))
+        let exposureTimeValue = try PTPDevicePropValueParser.parse(
+            exposureTime,
+            dataType: 0x0006,
+            propertyCode: 0x500D
+        )
+
+        var fractionalExposureTime = Data()
+        fractionalExposureTime.appendLittleEndian(UInt32(5_000))
+        let fractionalExposureTimeValue = try PTPDevicePropValueParser.parse(
+            fractionalExposureTime,
+            dataType: 0x0006,
+            propertyCode: 0x500D
+        )
+
+        var exposureBias = Data()
+        exposureBias.appendLittleEndian(Int16(333))
+        let exposureBiasValue = try PTPDevicePropValueParser.parse(
+            exposureBias,
+            dataType: 0x0003,
+            propertyCode: 0x5010
+        )
+
+        XCTAssertEqual(exposureTimeValue.display, "15 s")
+        XCTAssertEqual(fractionalExposureTimeValue.display, "1/2 s")
+        XCTAssertEqual(exposureBiasValue.display, "+0.333 EV")
+    }
+
     func testBundledAllowlistMatchesRuntimeDefaults() throws {
         let bundleURL = try XCTUnwrap(Bundle(for: PTPAllowlistTests.self).url(forResource: "PTPReadOnlyAllowlist", withExtension: "json"))
         let data = try Data(contentsOf: bundleURL)
@@ -238,6 +291,12 @@ final class PTPAllowlistTests: XCTestCase {
             values.forEach { data.appendPTPValue(.uint16($0)) }
         }
         return data
+    }
+
+    static func parseUInt16Property(_ rawValue: UInt16, propertyCode: UInt16) throws -> PTPPropertyValue {
+        var payload = Data()
+        payload.appendLittleEndian(rawValue)
+        return try PTPDevicePropValueParser.parse(payload, dataType: 0x0004, propertyCode: propertyCode)
     }
 
     enum TestPTPValue {
