@@ -8,8 +8,9 @@ final class ImageCaptureDiscoveryProbe: NSObject, CameraDiscoveryProbe, ICDevice
     private var browser: ICDeviceBrowser?
     private var continuation: CheckedContinuation<CameraDiscoveryOutcome, Never>?
     private var discoveredCameras: [ICCameraDevice] = []
+    private var authorizationEvidence: [String: String] = [:]
 
-    init(timeoutNanoseconds: UInt64 = 1_500_000_000) {
+    init(timeoutNanoseconds: UInt64 = 10_000_000_000) {
         self.timeoutNanoseconds = timeoutNanoseconds
     }
 
@@ -18,6 +19,7 @@ final class ImageCaptureDiscoveryProbe: NSObject, CameraDiscoveryProbe, ICDevice
             DispatchQueue.main.async {
                 self.continuation = continuation
                 self.discoveredCameras = []
+                self.authorizationEvidence = [:]
 
                 let browser = ICDeviceBrowser()
                 browser.delegate = self
@@ -25,12 +27,41 @@ final class ImageCaptureDiscoveryProbe: NSObject, CameraDiscoveryProbe, ICDevice
                     rawValue: ICDeviceTypeMask.camera.rawValue | ICDeviceLocationTypeMask.local.rawValue
                 ) ?? .camera
                 self.browser = browser
-                browser.start()
+                self.authorizationEvidence = [
+                    "initialContentsAuthorizationStatus": browser.contentsAuthorizationStatus.rawValue,
+                    "initialControlAuthorizationStatus": browser.controlAuthorizationStatus.rawValue,
+                    "discoveryTimeoutMilliseconds": "\(self.timeoutNanoseconds / 1_000_000)"
+                ]
 
-                Task { [weak self] in
-                    try? await Task.sleep(nanoseconds: self?.timeoutNanoseconds ?? 0)
-                    await MainActor.run {
-                        self?.finishDiscovery()
+                self.requestAuthorizationAndStart(browser)
+            }
+        }
+    }
+
+    private func requestAuthorizationAndStart(_ browser: ICDeviceBrowser) {
+        browser.requestContentsAuthorization { [weak self, weak browser] contentsStatus in
+            DispatchQueue.main.async {
+                guard let self, let browser, self.browser === browser else { return }
+                self.authorizationEvidence["contentsAuthorizationStatus"] = contentsStatus.rawValue
+
+                browser.requestControlAuthorization { [weak self, weak browser] controlStatus in
+                    DispatchQueue.main.async {
+                        guard let self, let browser, self.browser === browser else { return }
+                        self.authorizationEvidence["controlAuthorizationStatus"] = controlStatus.rawValue
+
+                        if Self.isDenied(contentsStatus) || Self.isDenied(controlStatus) {
+                            self.finishAuthorizationDenied()
+                            return
+                        }
+
+                        browser.start()
+
+                        Task { [weak self] in
+                            try? await Task.sleep(nanoseconds: self?.timeoutNanoseconds ?? 0)
+                            await MainActor.run {
+                                self?.finishDiscovery()
+                            }
+                        }
                     }
                 }
             }
@@ -49,11 +80,35 @@ final class ImageCaptureDiscoveryProbe: NSObject, CameraDiscoveryProbe, ICDevice
         discoveredCameras.removeAll { $0 === device }
     }
 
+    private func finishAuthorizationDenied() {
+        guard let continuation else { return }
+        browser?.stop()
+        browser = nil
+        self.continuation = nil
+        continuation.resume(
+            returning: CameraDiscoveryOutcome(
+                result: ProbeResult(
+                    command: .discovery,
+                    status: .inconclusive,
+                    message: "ImageCaptureCore camera access is not authorized.",
+                    failureLayer: .permission,
+                    evidence: authorizationEvidence
+                ),
+                targetCamera: nil,
+                ptpTransport: nil
+            )
+        )
+    }
+
     private func finishDiscovery() {
         guard let continuation else { return }
         if discoveredCameras.isEmpty {
             discoveredCameras = browser?.devices?.compactMap { $0 as? ICCameraDevice } ?? []
         }
+        var evidence = authorizationEvidence
+        evidence["cameraCount"] = "\(discoveredCameras.count)"
+        evidence["browserDeviceCount"] = "\(browser?.devices?.count ?? 0)"
+        evidence["browserIsBrowsing"] = browser?.isBrowsing == true ? "true" : "false"
         browser?.stop()
         browser = nil
         self.continuation = nil
@@ -64,9 +119,9 @@ final class ImageCaptureDiscoveryProbe: NSObject, CameraDiscoveryProbe, ICDevice
                     result: ProbeResult(
                         command: .discovery,
                         status: .inconclusive,
-                        message: "ImageCaptureCore discovery completed without a camera device.",
-                        failureLayer: .physical,
-                        evidence: ["cameraCount": "0"]
+                        message: "ImageCaptureCore discovery completed without an app-visible camera device.",
+                        failureLayer: .iOSAPI,
+                        evidence: evidence
                     ),
                     targetCamera: nil,
                     ptpTransport: nil
@@ -83,7 +138,7 @@ final class ImageCaptureDiscoveryProbe: NSObject, CameraDiscoveryProbe, ICDevice
                         status: .inconclusive,
                         message: "Discovered multiple ImageCaptureCore cameras; select one before read-only PTP probing.",
                         requiresUserDecision: true,
-                        evidence: ["cameraCount": "\(discoveredCameras.count)"]
+                        evidence: evidence
                     ),
                     targetCamera: nil,
                     ptpTransport: nil
@@ -98,11 +153,10 @@ final class ImageCaptureDiscoveryProbe: NSObject, CameraDiscoveryProbe, ICDevice
             command: .discovery,
             status: .passed,
             message: "Discovered one ImageCaptureCore camera.",
-            evidence: [
-                "cameraCount": "1",
+            evidence: evidence.merging([
                 "selectedCameraName": descriptor.name,
                 "hasPTPCapability": descriptor.capabilities.contains(.canAcceptPTPCommands) ? "true" : "false"
-            ]
+            ]) { _, new in new }
         )
         continuation.resume(
             returning: CameraDiscoveryOutcome(
@@ -133,6 +187,11 @@ final class ImageCaptureDiscoveryProbe: NSObject, CameraDiscoveryProbe, ICDevice
         default:
             return nil
         }
+    }
+
+    private static func isDenied(_ status: ICAuthorizationStatus) -> Bool {
+        let rawValue = status.rawValue.lowercased()
+        return rawValue.contains("denied") || rawValue.contains("restricted")
     }
 }
 

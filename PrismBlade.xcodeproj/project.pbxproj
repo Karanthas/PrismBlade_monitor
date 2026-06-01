@@ -26,12 +26,27 @@
 		AA0000000000000000000117 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000217 /* Assets.xcassets */; };
 		AA0000000000000000000118 /* SimulatedPixelBufferFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000230 /* SimulatedPixelBufferFactory.swift */; };
 		AA0000000000000000000119 /* VideoFileFrameSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000231 /* VideoFileFrameSource.swift */; };
+		AA0000000000000000000120 /* PixelBufferFixtureFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000220 /* PixelBufferFixtureFactory.swift */; };
+		AA0000000000000000000121 /* CubeFixtureFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000221 /* CubeFixtureFactory.swift */; };
+		AA0000000000000000000122 /* CPUReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000222 /* CPUReference.swift */; };
+		AA0000000000000000000123 /* PixelBufferFixtureFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000223 /* PixelBufferFixtureFactoryTests.swift */; };
+		AA0000000000000000000124 /* LUTParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000224 /* LUTParserTests.swift */; };
+		AA0000000000000000000125 /* CameraExposureRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000225 /* CameraExposureRulesTests.swift */; };
+		AA0000000000000000000126 /* CameraCommandServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000226 /* CameraCommandServiceTests.swift */; };
+		AA0000000000000000000127 /* MockCameraTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000227 /* MockCameraTransportTests.swift */; };
+		AA0000000000000000000128 /* CPUReferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000228 /* CPUReferenceTests.swift */; };
+		AA0000000000000000000129 /* FrameSourceStage2Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000232 /* FrameSourceStage2Tests.swift */; };
 		AA0000000000000000000130 /* MetalTextureBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000233 /* MetalTextureBridge.swift */; };
 		AA0000000000000000000131 /* MetalPreviewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000234 /* MetalPreviewRenderer.swift */; };
 		AA0000000000000000000132 /* MetalPreviewSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000235 /* MetalPreviewSurface.swift */; };
 		AA0000000000000000000133 /* PreviewShaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000236 /* PreviewShaders.metal */; };
+		AA0000000000000000000134 /* MetalTextureBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000237 /* MetalTextureBridgeTests.swift */; };
 		AA0000000000000000000135 /* LUTStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000238 /* LUTStore.swift */; };
 		AA0000000000000000000136 /* LUTPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000239 /* LUTPass.swift */; };
+		AA0000000000000000000137 /* LUTRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000240 /* LUTRepositoryTests.swift */; };
+		AA0000000000000000000138 /* LUTPassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000241 /* LUTPassTests.swift */; };
+		AA0000000000000000000139 /* MetalLUTShaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000242 /* MetalLUTShaderTests.swift */; };
+		AA0000000000000000000140 /* LUTs in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000243 /* LUTs */; };
 		AA0000000000000000000141 /* ColorTransformPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000244 /* ColorTransformPass.swift */; };
 		AA0000000000000000000142 /* FalseColorPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000245 /* FalseColorPass.swift */; };
 		AA0000000000000000000143 /* ZebraPass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000246 /* ZebraPass.swift */; };
@@ -52,21 +67,6 @@
 		BB0000000000000000000116 /* ProbeDiagnosticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000213 /* ProbeDiagnosticsTests.swift */; };
 		BB0000000000000000000117 /* ReadOnlyProbeSuiteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000214 /* ReadOnlyProbeSuiteTests.swift */; };
 		BB0000000000000000000118 /* PTPReadOnlyAllowlist.json in Resources */ = {isa = PBXBuildFile; fileRef = BB000000000000000000020A /* PTPReadOnlyAllowlist.json */; };
-		AA0000000000000000000137 /* LUTRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000240 /* LUTRepositoryTests.swift */; };
-		AA0000000000000000000138 /* LUTPassTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000241 /* LUTPassTests.swift */; };
-		AA0000000000000000000139 /* MetalLUTShaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000242 /* MetalLUTShaderTests.swift */; };
-		AA0000000000000000000140 /* LUTs in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000243 /* LUTs */; };
-		AA0000000000000000000120 /* PixelBufferFixtureFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000220 /* PixelBufferFixtureFactory.swift */; };
-		AA0000000000000000000121 /* CubeFixtureFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000221 /* CubeFixtureFactory.swift */; };
-		AA0000000000000000000122 /* CPUReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000222 /* CPUReference.swift */; };
-		AA0000000000000000000123 /* PixelBufferFixtureFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000223 /* PixelBufferFixtureFactoryTests.swift */; };
-		AA0000000000000000000124 /* LUTParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000224 /* LUTParserTests.swift */; };
-		AA0000000000000000000125 /* CameraExposureRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000225 /* CameraExposureRulesTests.swift */; };
-		AA0000000000000000000126 /* CameraCommandServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000226 /* CameraCommandServiceTests.swift */; };
-		AA0000000000000000000127 /* MockCameraTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000227 /* MockCameraTransportTests.swift */; };
-		AA0000000000000000000128 /* CPUReferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000228 /* CPUReferenceTests.swift */; };
-		AA0000000000000000000129 /* FrameSourceStage2Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000232 /* FrameSourceStage2Tests.swift */; };
-		AA0000000000000000000134 /* MetalTextureBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000237 /* MetalTextureBridgeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -163,19 +163,19 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AA0000000000000000000302 /* Frameworks */ = {
-				isa = PBXFrameworksBuildPhase;
-				buildActionMask = 2147483647;
-				files = (
-				);
-				runOnlyForDeploymentPostprocessing = 0;
-			};
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BB0000000000000000000301 /* Frameworks */ = {
-				isa = PBXFrameworksBuildPhase;
-				buildActionMask = 2147483647;
-				files = (
-				);
-				runOnlyForDeploymentPostprocessing = 0;
-			};
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BB0000000000000000000302 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -188,22 +188,22 @@
 /* Begin PBXGroup section */
 		AA0000000000000000000401 = {
 			isa = PBXGroup;
-				children = (
-					AA0000000000000000000403 /* PrismBlade */,
-					AA0000000000000000000413 /* PrismBladeTests */,
-					BB0000000000000000000401 /* PrismBladeLabs */,
-					AA0000000000000000000402 /* Products */,
-				);
+			children = (
+				AA0000000000000000000403 /* PrismBlade */,
+				AA0000000000000000000413 /* PrismBladeTests */,
+				BB0000000000000000000401 /* PrismBladeLabs */,
+				AA0000000000000000000402 /* Products */,
+			);
 			sourceTree = "<group>";
 		};
 		AA0000000000000000000402 /* Products */ = {
 			isa = PBXGroup;
-				children = (
-					AA0000000000000000000219 /* PrismBlade.app */,
-					AA0000000000000000000229 /* PrismBladeTests.xctest */,
-					BB0000000000000000000219 /* GPhotoProbe.app */,
-					BB000000000000000000021A /* GPhotoProbeTests.xctest */,
-				);
+			children = (
+				AA0000000000000000000219 /* PrismBlade.app */,
+				AA0000000000000000000229 /* PrismBladeTests.xctest */,
+				BB0000000000000000000219 /* GPhotoProbe.app */,
+				BB000000000000000000021A /* GPhotoProbeTests.xctest */,
+			);
 			name = Products;
 			sourceTree = "<group>";
 		};
@@ -273,30 +273,6 @@
 			path = Imaging;
 			sourceTree = "<group>";
 		};
-		AA0000000000000000000417 /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-				AA0000000000000000000243 /* LUTs */,
-			);
-			path = Resources;
-			sourceTree = "<group>";
-		};
-		AA0000000000000000000416 /* Metal */ = {
-			isa = PBXGroup;
-			children = (
-				AA0000000000000000000233 /* MetalTextureBridge.swift */,
-				AA0000000000000000000234 /* MetalPreviewRenderer.swift */,
-				AA0000000000000000000235 /* MetalPreviewSurface.swift */,
-				AA0000000000000000000248 /* MetalFrameProcessor.swift */,
-				AA0000000000000000000247 /* ScopeComputePass.swift */,
-				AA0000000000000000000236 /* PreviewShaders.metal */,
-				AA0000000000000000000244 /* ColorTransformPass.swift */,
-				AA0000000000000000000245 /* FalseColorPass.swift */,
-				AA0000000000000000000246 /* ZebraPass.swift */,
-			);
-			path = Metal;
-			sourceTree = "<group>";
-		};
 		AA0000000000000000000409 /* Screens */ = {
 			isa = PBXGroup;
 			children = (
@@ -348,11 +324,11 @@
 				AA0000000000000000000232 /* FrameSourceStage2Tests.swift */,
 				AA0000000000000000000237 /* MetalTextureBridgeTests.swift */,
 				AA0000000000000000000240 /* LUTRepositoryTests.swift */,
-					AA0000000000000000000241 /* LUTPassTests.swift */,
-					AA0000000000000000000242 /* MetalLUTShaderTests.swift */,
-					AA0000000000000000000249 /* ScopeComputePassTests.swift */,
-					BB0000000000000000000418 /* GPhotoProbe */,
-				);
+				AA0000000000000000000241 /* LUTPassTests.swift */,
+				AA0000000000000000000242 /* MetalLUTShaderTests.swift */,
+				AA0000000000000000000249 /* ScopeComputePassTests.swift */,
+				BB0000000000000000000418 /* GPhotoProbe */,
+			);
 			path = PrismBladeTests;
 			sourceTree = "<group>";
 		};
@@ -366,57 +342,81 @@
 			sourceTree = "<group>";
 		};
 		AA0000000000000000000415 /* References */ = {
-				isa = PBXGroup;
-				children = (
-					AA0000000000000000000222 /* CPUReference.swift */,
-				);
-				path = References;
-				sourceTree = "<group>";
-			};
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000222 /* CPUReference.swift */,
+			);
+			path = References;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000416 /* Metal */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000233 /* MetalTextureBridge.swift */,
+				AA0000000000000000000234 /* MetalPreviewRenderer.swift */,
+				AA0000000000000000000235 /* MetalPreviewSurface.swift */,
+				AA0000000000000000000248 /* MetalFrameProcessor.swift */,
+				AA0000000000000000000247 /* ScopeComputePass.swift */,
+				AA0000000000000000000236 /* PreviewShaders.metal */,
+				AA0000000000000000000244 /* ColorTransformPass.swift */,
+				AA0000000000000000000245 /* FalseColorPass.swift */,
+				AA0000000000000000000246 /* ZebraPass.swift */,
+			);
+			path = Metal;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000417 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000243 /* LUTs */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		BB0000000000000000000401 /* PrismBladeLabs */ = {
-				isa = PBXGroup;
-				children = (
-					BB0000000000000000000402 /* GPhotoProbe */,
-				);
-				path = PrismBladeLabs;
-				sourceTree = "<group>";
-			};
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000402 /* GPhotoProbe */,
+			);
+			path = PrismBladeLabs;
+			sourceTree = "<group>";
+		};
 		BB0000000000000000000402 /* GPhotoProbe */ = {
-				isa = PBXGroup;
-				children = (
-					BB0000000000000000000201 /* GPhotoProbeApp.swift */,
-					BB0000000000000000000202 /* GPhotoProbeScreen.swift */,
-					BB0000000000000000000203 /* GPhotoProbeViewModel.swift */,
-					BB0000000000000000000204 /* ProbeModels.swift */,
-					BB0000000000000000000205 /* ProbeDiagnostics.swift */,
-					BB0000000000000000000206 /* PTPAllowlist.swift */,
-					BB0000000000000000000207 /* ProbeCoordinator.swift */,
-					BB0000000000000000000208 /* ImageCaptureProbeAdapter.swift */,
-					BB0000000000000000000209 /* Info.plist */,
-					BB0000000000000000000403 /* Resources */,
-				);
-				path = GPhotoProbe;
-				sourceTree = "<group>";
-			};
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000201 /* GPhotoProbeApp.swift */,
+				BB0000000000000000000202 /* GPhotoProbeScreen.swift */,
+				BB0000000000000000000203 /* GPhotoProbeViewModel.swift */,
+				BB0000000000000000000204 /* ProbeModels.swift */,
+				BB0000000000000000000205 /* ProbeDiagnostics.swift */,
+				BB0000000000000000000206 /* PTPAllowlist.swift */,
+				BB0000000000000000000207 /* ProbeCoordinator.swift */,
+				BB0000000000000000000208 /* ImageCaptureProbeAdapter.swift */,
+				BB0000000000000000000209 /* Info.plist */,
+				BB0000000000000000000403 /* Resources */,
+			);
+			path = GPhotoProbe;
+			sourceTree = "<group>";
+		};
 		BB0000000000000000000403 /* Resources */ = {
-				isa = PBXGroup;
-				children = (
-					BB000000000000000000020A /* PTPReadOnlyAllowlist.json */,
-				);
-				path = Resources;
-				sourceTree = "<group>";
-			};
+			isa = PBXGroup;
+			children = (
+				BB000000000000000000020A /* PTPReadOnlyAllowlist.json */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		BB0000000000000000000418 /* GPhotoProbe */ = {
-				isa = PBXGroup;
-				children = (
-					BB0000000000000000000211 /* ProbeCommandMatrixTests.swift */,
-					BB0000000000000000000212 /* PTPAllowlistTests.swift */,
-					BB0000000000000000000213 /* ProbeDiagnosticsTests.swift */,
-					BB0000000000000000000214 /* ReadOnlyProbeSuiteTests.swift */,
-				);
-				path = GPhotoProbe;
-				sourceTree = "<group>";
-			};
+			isa = PBXGroup;
+			children = (
+				BB0000000000000000000211 /* ProbeCommandMatrixTests.swift */,
+				BB0000000000000000000212 /* PTPAllowlistTests.swift */,
+				BB0000000000000000000213 /* ProbeDiagnosticsTests.swift */,
+				BB0000000000000000000214 /* ReadOnlyProbeSuiteTests.swift */,
+			);
+			path = GPhotoProbe;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -438,8 +438,8 @@
 			productType = "com.apple.product-type.application";
 		};
 		AA0000000000000000000502 /* PrismBladeTests */ = {
-				isa = PBXNativeTarget;
-				buildConfigurationList = AA0000000000000000000903 /* Build configuration list for PBXNativeTarget "PrismBladeTests" */;
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000903 /* Build configuration list for PBXNativeTarget "PrismBladeTests" */;
 			buildPhases = (
 				AA0000000000000000000603 /* Sources */,
 				AA0000000000000000000302 /* Frameworks */,
@@ -452,26 +452,26 @@
 			);
 			name = PrismBladeTests;
 			productName = PrismBladeTests;
-				productReference = AA0000000000000000000229 /* PrismBladeTests.xctest */;
-				productType = "com.apple.product-type.bundle.unit-test";
-			};
+			productReference = AA0000000000000000000229 /* PrismBladeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		BB0000000000000000000501 /* GPhotoProbe */ = {
-				isa = PBXNativeTarget;
-				buildConfigurationList = BB0000000000000000000901 /* Build configuration list for PBXNativeTarget "GPhotoProbe" */;
-				buildPhases = (
-					BB0000000000000000000601 /* Sources */,
-					BB0000000000000000000301 /* Frameworks */,
-					BB0000000000000000000602 /* Resources */,
-				);
-				buildRules = (
-				);
-				dependencies = (
-				);
-				name = GPhotoProbe;
-				productName = GPhotoProbe;
-				productReference = BB0000000000000000000219 /* GPhotoProbe.app */;
-				productType = "com.apple.product-type.application";
-			};
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB0000000000000000000901 /* Build configuration list for PBXNativeTarget "GPhotoProbe" */;
+			buildPhases = (
+				BB0000000000000000000601 /* Sources */,
+				BB0000000000000000000301 /* Frameworks */,
+				BB0000000000000000000602 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GPhotoProbe;
+			productName = GPhotoProbe;
+			productReference = BB0000000000000000000219 /* GPhotoProbe.app */;
+			productType = "com.apple.product-type.application";
+		};
 		BB0000000000000000000502 /* GPhotoProbeTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = BB0000000000000000000902 /* Build configuration list for PBXNativeTarget "GPhotoProbeTests" */;
@@ -503,18 +503,18 @@
 					AA0000000000000000000501 = {
 						CreatedOnToolsVersion = 15.3;
 					};
-						AA0000000000000000000502 = {
-							CreatedOnToolsVersion = 15.3;
-							TestTargetID = AA0000000000000000000501;
-						};
-						BB0000000000000000000501 = {
-							CreatedOnToolsVersion = 15.3;
-						};
-						BB0000000000000000000502 = {
-							CreatedOnToolsVersion = 15.3;
-							TestTargetID = BB0000000000000000000501;
-						};
+					AA0000000000000000000502 = {
+						CreatedOnToolsVersion = 15.3;
+						TestTargetID = AA0000000000000000000501;
 					};
+					BB0000000000000000000501 = {
+						CreatedOnToolsVersion = 15.3;
+					};
+					BB0000000000000000000502 = {
+						CreatedOnToolsVersion = 15.3;
+						TestTargetID = BB0000000000000000000501;
+					};
+				};
 			};
 			buildConfigurationList = AA0000000000000000000901 /* Build configuration list for PBXProject "PrismBlade" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -529,12 +529,12 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-					AA0000000000000000000501 /* PrismBlade */,
-					AA0000000000000000000502 /* PrismBladeTests */,
-					BB0000000000000000000501 /* GPhotoProbe */,
-					BB0000000000000000000502 /* GPhotoProbeTests */,
-				);
-			};
+				AA0000000000000000000501 /* PrismBlade */,
+				AA0000000000000000000502 /* PrismBladeTests */,
+				BB0000000000000000000501 /* GPhotoProbe */,
+				BB0000000000000000000502 /* GPhotoProbeTests */,
+			);
+		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
@@ -548,20 +548,20 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AA0000000000000000000604 /* Resources */ = {
-				isa = PBXResourcesBuildPhase;
-				buildActionMask = 2147483647;
-				files = (
-				);
-				runOnlyForDeploymentPostprocessing = 0;
-			};
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BB0000000000000000000602 /* Resources */ = {
-				isa = PBXResourcesBuildPhase;
-				buildActionMask = 2147483647;
-				files = (
-					BB0000000000000000000109 /* PTPReadOnlyAllowlist.json in Resources */,
-				);
-				runOnlyForDeploymentPostprocessing = 0;
-			};
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000000109 /* PTPReadOnlyAllowlist.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BB0000000000000000000604 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -626,26 +626,26 @@
 				AA0000000000000000000134 /* MetalTextureBridgeTests.swift in Sources */,
 				AA0000000000000000000137 /* LUTRepositoryTests.swift in Sources */,
 				AA0000000000000000000138 /* LUTPassTests.swift in Sources */,
-					AA0000000000000000000139 /* MetalLUTShaderTests.swift in Sources */,
-					AA0000000000000000000146 /* ScopeComputePassTests.swift in Sources */,
-				);
-				runOnlyForDeploymentPostprocessing = 0;
-			};
+				AA0000000000000000000139 /* MetalLUTShaderTests.swift in Sources */,
+				AA0000000000000000000146 /* ScopeComputePassTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BB0000000000000000000601 /* Sources */ = {
-				isa = PBXSourcesBuildPhase;
-				buildActionMask = 2147483647;
-				files = (
-					BB0000000000000000000101 /* GPhotoProbeApp.swift in Sources */,
-					BB0000000000000000000102 /* GPhotoProbeScreen.swift in Sources */,
-					BB0000000000000000000103 /* GPhotoProbeViewModel.swift in Sources */,
-					BB0000000000000000000104 /* ProbeModels.swift in Sources */,
-					BB0000000000000000000105 /* ProbeDiagnostics.swift in Sources */,
-					BB0000000000000000000106 /* PTPAllowlist.swift in Sources */,
-					BB0000000000000000000107 /* ProbeCoordinator.swift in Sources */,
-					BB0000000000000000000108 /* ImageCaptureProbeAdapter.swift in Sources */,
-				);
-				runOnlyForDeploymentPostprocessing = 0;
-			};
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000000101 /* GPhotoProbeApp.swift in Sources */,
+				BB0000000000000000000102 /* GPhotoProbeScreen.swift in Sources */,
+				BB0000000000000000000103 /* GPhotoProbeViewModel.swift in Sources */,
+				BB0000000000000000000104 /* ProbeModels.swift in Sources */,
+				BB0000000000000000000105 /* ProbeDiagnostics.swift in Sources */,
+				BB0000000000000000000106 /* PTPAllowlist.swift in Sources */,
+				BB0000000000000000000107 /* ProbeCoordinator.swift in Sources */,
+				BB0000000000000000000108 /* ImageCaptureProbeAdapter.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BB0000000000000000000603 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -791,7 +791,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = MC89256WB8;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PrismBlade/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -811,7 +811,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = MC89256WB8;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PrismBlade/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -883,7 +883,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = MC89256WB8;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PrismBladeLabs/GPhotoProbe/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -903,7 +903,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = MC89256WB8;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PrismBladeLabs/GPhotoProbe/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
