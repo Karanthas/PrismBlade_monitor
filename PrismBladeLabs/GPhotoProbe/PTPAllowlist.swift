@@ -179,6 +179,158 @@ protocol PTPHardwareTransport {
     func sendAllowlistedPTPCommand(_ packet: PTPCommandPacket) async throws -> PTPTransportResponse
 }
 
+struct PTPProbeOutcome: Equatable {
+    var result: ProbeResult
+    var response: PTPTransportResponse?
+}
+
+struct PTPDeviceInfo: Equatable {
+    var standardVersion: UInt16
+    var vendorExtensionID: UInt32
+    var vendorExtensionVersion: UInt16
+    var vendorExtensionDescription: String
+    var functionalMode: UInt16
+    var operationsSupported: [UInt16]
+    var eventsSupported: [UInt16]
+    var devicePropertiesSupported: [UInt16]
+    var captureFormats: [UInt16]
+    var imageFormats: [UInt16]
+    var manufacturer: String
+    var model: String
+    var deviceVersion: String
+    var serialNumber: String
+
+    var evidence: [String: String] {
+        var evidence = [
+            "standardVersion": "\(standardVersion)",
+            "vendorExtensionID": PTPDeviceInfoParser.hex(vendorExtensionID),
+            "vendorExtensionVersion": "\(vendorExtensionVersion)",
+            "vendorExtensionDescription": vendorExtensionDescription,
+            "functionalMode": PTPDeviceInfoParser.hex(functionalMode),
+            "manufacturer": manufacturer,
+            "model": model,
+            "deviceVersion": deviceVersion,
+            "supportedOperationCount": "\(operationsSupported.count)",
+            "supportedEventCount": "\(eventsSupported.count)",
+            "supportedDevicePropertyCount": "\(devicePropertiesSupported.count)",
+            "captureFormatCount": "\(captureFormats.count)",
+            "imageFormatCount": "\(imageFormats.count)",
+            "supportedOperations": operationsSupported.map(PTPDeviceInfoParser.hex).joined(separator: ","),
+            "supportedEvents": eventsSupported.map(PTPDeviceInfoParser.hex).joined(separator: ","),
+            "supportedDeviceProperties": devicePropertiesSupported.map(PTPDeviceInfoParser.hex).joined(separator: ",")
+        ]
+        if !serialNumber.isEmpty {
+            evidence["serialNumber"] = "REDACTED"
+        }
+        return evidence
+    }
+
+    func probePropertyCodes(limit: Int = 12) -> [UInt16] {
+        let supported = Set(devicePropertiesSupported)
+        let preferred = PTPDevicePropertyCatalog.preferredProbeOrder.filter(supported.contains)
+        let remaining = devicePropertiesSupported.filter { !preferred.contains($0) }
+        return Array((preferred + remaining).prefix(limit))
+    }
+}
+
+enum PTPPayloadParseError: Error, Equatable, LocalizedError {
+    case truncated(field: String, offset: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .truncated(let field, let offset):
+            return "PTP payload ended while parsing \(field) at byte offset \(offset)."
+        }
+    }
+}
+
+enum PTPDeviceInfoParser {
+    static func parse(_ data: Data) throws -> PTPDeviceInfo {
+        var cursor = PTPPayloadCursor(data: data)
+        return PTPDeviceInfo(
+            standardVersion: try cursor.readUInt16(field: "standardVersion"),
+            vendorExtensionID: try cursor.readUInt32(field: "vendorExtensionID"),
+            vendorExtensionVersion: try cursor.readUInt16(field: "vendorExtensionVersion"),
+            vendorExtensionDescription: try cursor.readString(field: "vendorExtensionDescription"),
+            functionalMode: try cursor.readUInt16(field: "functionalMode"),
+            operationsSupported: try cursor.readUInt16Array(field: "operationsSupported"),
+            eventsSupported: try cursor.readUInt16Array(field: "eventsSupported"),
+            devicePropertiesSupported: try cursor.readUInt16Array(field: "devicePropertiesSupported"),
+            captureFormats: try cursor.readUInt16Array(field: "captureFormats"),
+            imageFormats: try cursor.readUInt16Array(field: "imageFormats"),
+            manufacturer: try cursor.readString(field: "manufacturer"),
+            model: try cursor.readString(field: "model"),
+            deviceVersion: try cursor.readString(field: "deviceVersion"),
+            serialNumber: try cursor.readString(field: "serialNumber")
+        )
+    }
+
+    static func hex(_ value: UInt16) -> String {
+        "0x\(String(value, radix: 16, uppercase: true))"
+    }
+
+    static func hex(_ value: UInt32) -> String {
+        "0x\(String(value, radix: 16, uppercase: true))"
+    }
+}
+
+enum PTPDevicePropertyCatalog {
+    static let preferredProbeOrder: [UInt16] = [
+        0x5001, // BatteryLevel
+        0x5005, // WhiteBalance
+        0x5007, // FNumber
+        0x500A, // FocusMode
+        0x500B, // ExposureMeteringMode
+        0x500D, // ExposureTime
+        0x500E, // ExposureProgramMode
+        0x500F, // ExposureIndex
+        0x5010, // ExposureBiasCompensation
+        0x5013, // StillCaptureMode
+        0x501C  // FocusMeteringMode
+    ]
+
+    static func name(for code: UInt16) -> String {
+        switch code {
+        case 0x5001: return "BatteryLevel"
+        case 0x5002: return "FunctionalMode"
+        case 0x5003: return "ImageSize"
+        case 0x5004: return "CompressionSetting"
+        case 0x5005: return "WhiteBalance"
+        case 0x5006: return "RGBGain"
+        case 0x5007: return "FNumber"
+        case 0x5008: return "FocalLength"
+        case 0x5009: return "FocusDistance"
+        case 0x500A: return "FocusMode"
+        case 0x500B: return "ExposureMeteringMode"
+        case 0x500C: return "FlashMode"
+        case 0x500D: return "ExposureTime"
+        case 0x500E: return "ExposureProgramMode"
+        case 0x500F: return "ExposureIndex"
+        case 0x5010: return "ExposureBiasCompensation"
+        case 0x5011: return "DateTime"
+        case 0x5012: return "CaptureDelay"
+        case 0x5013: return "StillCaptureMode"
+        case 0x5014: return "Contrast"
+        case 0x5015: return "Sharpness"
+        case 0x5016: return "DigitalZoom"
+        case 0x5017: return "EffectMode"
+        case 0x5018: return "BurstNumber"
+        case 0x5019: return "BurstInterval"
+        case 0x501A: return "TimelapseNumber"
+        case 0x501B: return "TimelapseInterval"
+        case 0x501C: return "FocusMeteringMode"
+        case 0x501D: return "UploadURL"
+        case 0x501E: return "Artist"
+        case 0x501F: return "CopyrightInfo"
+        default:
+            if code >= 0xD000 {
+                return "VendorProperty"
+            }
+            return "UnknownProperty"
+        }
+    }
+}
+
 enum PTPResponseDisposition: Equatable {
     case ok
     case unsupported
@@ -247,14 +399,33 @@ struct PTPProbeClient {
         outData: Data? = nil,
         transport: PTPHardwareTransport
     ) async -> ProbeResult {
+        await sendDetailed(
+            command,
+            probeCommand: probeCommand,
+            parameters: parameters,
+            outData: outData,
+            transport: transport
+        ).result
+    }
+
+    mutating func sendDetailed(
+        _ command: ReadOnlyPTPCommand,
+        probeCommand: ProbeCommand = .abilities,
+        parameters: [UInt32] = [],
+        outData: Data? = nil,
+        transport: PTPHardwareTransport
+    ) async -> PTPProbeOutcome {
         guard transport.canAcceptPTPCommands else {
-            return ProbeResult(
-                command: probeCommand,
-                status: .inconclusive,
-                message: "PTP command capability is unavailable; user decision required.",
-                failureLayer: .iOSAPI,
-                requiresUserDecision: true,
-                evidence: ["criticalPause": "true"]
+            return PTPProbeOutcome(
+                result: ProbeResult(
+                    command: probeCommand,
+                    status: .inconclusive,
+                    message: "PTP command capability is unavailable; user decision required.",
+                    failureLayer: .iOSAPI,
+                    requiresUserDecision: true,
+                    evidence: ["criticalPause": "true"]
+                ),
+                response: nil
             )
         }
 
@@ -272,55 +443,79 @@ struct PTPProbeClient {
                 "payloadBytes": "\(response.payloadData.count)",
                 "durationMilliseconds": "\(response.durationMilliseconds)"
             ]
+            if let firstParameter = parameters.first {
+                let propertyCode = UInt16(truncatingIfNeeded: firstParameter)
+                evidence["parameter1"] = PTPDeviceInfoParser.hex(firstParameter)
+                evidence["devicePropertyCode"] = PTPDeviceInfoParser.hex(propertyCode)
+                evidence["devicePropertyName"] = PTPDevicePropertyCatalog.name(for: propertyCode)
+            }
             evidence.merge(PTPResponseParser.evidence(for: response.responseContainer)) { _, new in new }
 
             switch PTPResponseParser.disposition(for: response.responseContainer) {
             case .ok:
-                return ProbeResult(
-                    command: probeCommand,
-                    status: .passed,
-                    message: "PTP read-only round-trip completed.",
-                    evidence: evidence
+                return PTPProbeOutcome(
+                    result: ProbeResult(
+                        command: probeCommand,
+                        status: .passed,
+                        message: "PTP read-only round-trip completed.",
+                        evidence: evidence
+                    ),
+                    response: response
                 )
             case .unsupported:
-                return ProbeResult(
-                    command: probeCommand,
-                    status: .inconclusive,
-                    message: "PTP read-only command is unsupported by the camera.",
-                    failureLayer: .ptpResponse,
-                    evidence: evidence
+                return PTPProbeOutcome(
+                    result: ProbeResult(
+                        command: probeCommand,
+                        status: .inconclusive,
+                        message: "PTP read-only command is unsupported by the camera.",
+                        failureLayer: .ptpResponse,
+                        evidence: evidence
+                    ),
+                    response: response
                 )
             case .other(let responseCode):
                 evidence["responseCode"] = "0x\(String(responseCode, radix: 16, uppercase: true))"
-                return ProbeResult(
-                    command: probeCommand,
-                    status: .failed,
-                    message: "PTP read-only command returned an error response.",
-                    failureLayer: .ptpResponse,
-                    evidence: evidence
+                return PTPProbeOutcome(
+                    result: ProbeResult(
+                        command: probeCommand,
+                        status: .failed,
+                        message: "PTP read-only command returned an error response.",
+                        failureLayer: .ptpResponse,
+                        evidence: evidence
+                    ),
+                    response: response
                 )
             case .malformed:
-                return ProbeResult(
-                    command: probeCommand,
-                    status: .inconclusive,
-                    message: "PTP response container was missing or malformed.",
-                    failureLayer: .ptpResponse,
-                    evidence: evidence
+                return PTPProbeOutcome(
+                    result: ProbeResult(
+                        command: probeCommand,
+                        status: .inconclusive,
+                        message: "PTP response container was missing or malformed.",
+                        failureLayer: .ptpResponse,
+                        evidence: evidence
+                    ),
+                    response: response
                 )
             }
         } catch let error as ProbeSafetyError {
-            return ProbeResult(
-                command: probeCommand,
-                status: .failed,
-                message: error.localizedDescription,
-                failureLayer: .safetyGate
+            return PTPProbeOutcome(
+                result: ProbeResult(
+                    command: probeCommand,
+                    status: .failed,
+                    message: error.localizedDescription,
+                    failureLayer: .safetyGate
+                ),
+                response: nil
             )
         } catch {
-            return ProbeResult(
-                command: probeCommand,
-                status: .failed,
-                message: error.localizedDescription,
-                failureLayer: .ptpTransport
+            return PTPProbeOutcome(
+                result: ProbeResult(
+                    command: probeCommand,
+                    status: .failed,
+                    message: error.localizedDescription,
+                    failureLayer: .ptpTransport
+                ),
+                response: nil
             )
         }
     }
@@ -337,11 +532,87 @@ private extension Data {
             UInt16(littleEndian: buffer.loadUnaligned(fromByteOffset: offset, as: UInt16.self))
         }
     }
+
+    func readLittleEndianUInt32(at offset: Int) -> UInt32? {
+        guard count >= offset + MemoryLayout<UInt32>.size else { return nil }
+        return withUnsafeBytes { buffer in
+            UInt32(littleEndian: buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self))
+        }
+    }
 }
 
 private extension FixedWidthInteger {
     var littleEndianData: Data {
         var value = littleEndian
         return Data(bytes: &value, count: MemoryLayout<Self>.size)
+    }
+}
+
+private struct PTPPayloadCursor {
+    private let data: Data
+    private(set) var offset = 0
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    mutating func readUInt16(field: String) throws -> UInt16 {
+        guard let value = data.readLittleEndianUInt16(at: offset) else {
+            throw PTPPayloadParseError.truncated(field: field, offset: offset)
+        }
+        offset += 2
+        return value
+    }
+
+    mutating func readUInt32(field: String) throws -> UInt32 {
+        guard let value = data.readLittleEndianUInt32(at: offset) else {
+            throw PTPPayloadParseError.truncated(field: field, offset: offset)
+        }
+        offset += 4
+        return value
+    }
+
+    mutating func readUInt16Array(field: String) throws -> [UInt16] {
+        let count = try readUInt32(field: "\(field).count")
+        let remainingValueCapacity = (data.count - offset) / 2
+        guard count <= UInt32(remainingValueCapacity) else {
+            throw PTPPayloadParseError.truncated(field: field, offset: offset)
+        }
+        var values: [UInt16] = []
+        values.reserveCapacity(Int(count))
+        for index in 0..<count {
+            values.append(try readUInt16(field: "\(field)[\(index)]"))
+        }
+        return values
+    }
+
+    mutating func readString(field: String) throws -> String {
+        guard offset < data.count else {
+            throw PTPPayloadParseError.truncated(field: field, offset: offset)
+        }
+
+        let characterCount = Int(data[offset])
+        offset += 1
+        guard characterCount > 0 else { return "" }
+
+        let byteCount = characterCount * 2
+        guard data.count >= offset + byteCount else {
+            throw PTPPayloadParseError.truncated(field: field, offset: offset)
+        }
+
+        let bytes = data.subdata(in: offset..<(offset + byteCount))
+        offset += byteCount
+        var codeUnits: [UInt16] = []
+        codeUnits.reserveCapacity(characterCount)
+        for characterIndex in 0..<characterCount {
+            let byteOffset = characterIndex * 2
+            guard let codeUnit = bytes.readLittleEndianUInt16(at: byteOffset) else {
+                throw PTPPayloadParseError.truncated(field: field, offset: offset)
+            }
+            if codeUnit != 0 {
+                codeUnits.append(codeUnit)
+            }
+        }
+        return String(decoding: codeUnits, as: UTF16.self)
     }
 }

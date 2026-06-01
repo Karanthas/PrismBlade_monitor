@@ -83,6 +83,35 @@ final class PTPAllowlistTests: XCTestCase {
         XCTAssertEqual(result.evidence["responseCode"], "0x2005")
     }
 
+    func testDetailedSendKeepsPayloadForFollowOnParsing() async {
+        var client = PTPProbeClient()
+        let payload = Data([0xAA, 0xBB])
+        let transport = SpyPTPTransport(canAcceptPTPCommands: true, payloadData: payload)
+
+        let outcome = await client.sendDetailed(.getDeviceInfo, transport: transport)
+
+        XCTAssertEqual(outcome.result.status, .passed)
+        XCTAssertEqual(outcome.response?.payloadData, payload)
+        XCTAssertEqual(outcome.result.evidence["payloadBytes"], "2")
+    }
+
+    func testDeviceInfoParserExtractsSupportedPropertiesAndRedactsSerialEvidence() throws {
+        let payload = Self.deviceInfoPayload(
+            operations: [0x1001, 0x1014, 0x1015],
+            events: [0x4002],
+            properties: [0x5001, 0x5007, 0xD100]
+        )
+
+        let deviceInfo = try PTPDeviceInfoParser.parse(payload)
+
+        XCTAssertEqual(deviceInfo.manufacturer, "Nikon")
+        XCTAssertEqual(deviceInfo.model, "Z6_3")
+        XCTAssertEqual(deviceInfo.devicePropertiesSupported, [0x5001, 0x5007, 0xD100])
+        XCTAssertEqual(deviceInfo.probePropertyCodes(limit: 3), [0x5001, 0x5007, 0xD100])
+        XCTAssertEqual(deviceInfo.evidence["serialNumber"], "REDACTED")
+        XCTAssertEqual(deviceInfo.evidence["supportedDeviceProperties"], "0x5001,0x5007,0xD100")
+    }
+
     func testBundledAllowlistMatchesRuntimeDefaults() throws {
         let bundleURL = try XCTUnwrap(Bundle(for: PTPAllowlistTests.self).url(forResource: "PTPReadOnlyAllowlist", withExtension: "json"))
         let data = try Data(contentsOf: bundleURL)
@@ -107,17 +136,42 @@ final class PTPAllowlistTests: XCTestCase {
 
         XCTAssertThrowsError(try JSONDecoder().decode([PTPAllowlistEntry].self, from: Data(forgedJSON.utf8)))
     }
+
+    static func deviceInfoPayload(
+        operations: [UInt16],
+        events: [UInt16],
+        properties: [UInt16]
+    ) -> Data {
+        var data = Data()
+        data.appendLittleEndian(UInt16(100))
+        data.appendLittleEndian(UInt32(0x0000000A))
+        data.appendLittleEndian(UInt16(100))
+        data.appendPTPString("Nikon extension")
+        data.appendLittleEndian(UInt16(0))
+        data.appendPTPUInt16Array(operations)
+        data.appendPTPUInt16Array(events)
+        data.appendPTPUInt16Array(properties)
+        data.appendPTPUInt16Array([0x3801])
+        data.appendPTPUInt16Array([0x3801, 0x3802])
+        data.appendPTPString("Nikon")
+        data.appendPTPString("Z6_3")
+        data.appendPTPString("1.00")
+        data.appendPTPString("SERIAL-1234")
+        return data
+    }
 }
 
 private final class SpyPTPTransport: PTPHardwareTransport {
     let canAcceptPTPCommands: Bool
     let responseCode: UInt16
+    let payloadData: Data
     private(set) var sendCallCount = 0
     private(set) var lastPacket: PTPCommandPacket?
 
-    init(canAcceptPTPCommands: Bool, responseCode: UInt16 = 0x2001) {
+    init(canAcceptPTPCommands: Bool, responseCode: UInt16 = 0x2001, payloadData: Data = Data([0x00])) {
         self.canAcceptPTPCommands = canAcceptPTPCommands
         self.responseCode = responseCode
+        self.payloadData = payloadData
     }
 
     func sendAllowlistedPTPCommand(_ packet: PTPCommandPacket) async throws -> PTPTransportResponse {
@@ -125,7 +179,7 @@ private final class SpyPTPTransport: PTPHardwareTransport {
         lastPacket = packet
         return PTPTransportResponse(
             responseContainer: Self.responseContainer(code: responseCode, transactionID: packet.transactionID),
-            payloadData: Data([0x00]),
+            payloadData: payloadData,
             durationMilliseconds: 3
         )
     }
@@ -144,5 +198,16 @@ private extension Data {
     mutating func appendLittleEndian<T: FixedWidthInteger>(_ value: T) {
         var littleEndian = value.littleEndian
         append(Data(bytes: &littleEndian, count: MemoryLayout<T>.size))
+    }
+
+    mutating func appendPTPUInt16Array(_ values: [UInt16]) {
+        appendLittleEndian(UInt32(values.count))
+        values.forEach { appendLittleEndian($0) }
+    }
+
+    mutating func appendPTPString(_ string: String) {
+        let codeUnits = Array(string.utf16) + [0]
+        append(UInt8(codeUnits.count))
+        codeUnits.forEach { appendLittleEndian($0) }
     }
 }
