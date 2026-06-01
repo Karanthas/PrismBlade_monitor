@@ -112,6 +112,56 @@ final class PTPAllowlistTests: XCTestCase {
         XCTAssertEqual(deviceInfo.evidence["supportedDeviceProperties"], "0x5001,0x5007,0xD100")
     }
 
+    func testDevicePropDescParserExtractsEnumFormAndDisplayValues() throws {
+        let payload = Self.devicePropDescPayload(
+            propertyCode: 0x5007,
+            dataType: 0x0004,
+            access: 0x01,
+            factoryDefault: .uint16(280),
+            current: .uint16(560),
+            form: .enumUInt16([280, 400, 560])
+        )
+
+        let desc = try PTPDevicePropDescParser.parse(payload, expectedPropertyCode: 0x5007)
+        let evidence = desc.evidence(propertyCode: 0x5007)
+
+        XCTAssertEqual(desc.propertyCode, 0x5007)
+        XCTAssertEqual(desc.dataType, 0x0004)
+        XCTAssertEqual(evidence["propertyDataTypeName"], "UInt16")
+        XCTAssertEqual(evidence["propertyAccess"], "readWrite")
+        XCTAssertEqual(evidence["currentDisplay"], "f/5.6")
+        XCTAssertEqual(evidence["allowedValuesDisplay"], "f/2.8,f/4,f/5.6")
+    }
+
+    func testDevicePropDescParserExtractsRangeForm() throws {
+        let payload = Self.devicePropDescPayload(
+            propertyCode: 0x5001,
+            dataType: 0x0002,
+            access: 0x00,
+            factoryDefault: .uint8(100),
+            current: .uint8(87),
+            form: .rangeUInt8(minimum: 0, maximum: 100, step: 1)
+        )
+
+        let desc = try PTPDevicePropDescParser.parse(payload, expectedPropertyCode: 0x5001)
+        let evidence = desc.evidence(propertyCode: 0x5001)
+
+        XCTAssertEqual(evidence["propertyAccess"], "readOnly")
+        XCTAssertEqual(evidence["currentDisplay"], "87%")
+        XCTAssertEqual(evidence["formKind"], "range")
+        XCTAssertEqual(evidence["rangeMaximumDisplay"], "100%")
+    }
+
+    func testDevicePropValueParserUsesDescriptorTypeForDisplay() throws {
+        var payload = Data()
+        payload.appendLittleEndian(UInt16(560))
+
+        let value = try PTPDevicePropValueParser.parse(payload, dataType: 0x0004, propertyCode: 0x5007)
+
+        XCTAssertEqual(value.raw, "560")
+        XCTAssertEqual(value.display, "f/5.6")
+    }
+
     func testBundledAllowlistMatchesRuntimeDefaults() throws {
         let bundleURL = try XCTUnwrap(Bundle(for: PTPAllowlistTests.self).url(forResource: "PTPReadOnlyAllowlist", withExtension: "json"))
         let data = try Data(contentsOf: bundleURL)
@@ -158,6 +208,47 @@ final class PTPAllowlistTests: XCTestCase {
         data.appendPTPString("1.00")
         data.appendPTPString("SERIAL-1234")
         return data
+    }
+
+    static func devicePropDescPayload(
+        propertyCode: UInt16,
+        dataType: UInt16,
+        access: UInt8,
+        factoryDefault: TestPTPValue,
+        current: TestPTPValue,
+        form: TestPTPForm
+    ) -> Data {
+        var data = Data()
+        data.appendLittleEndian(propertyCode)
+        data.appendLittleEndian(dataType)
+        data.append(access)
+        data.appendPTPValue(factoryDefault)
+        data.appendPTPValue(current)
+        switch form {
+        case .none:
+            data.append(0x00)
+        case .rangeUInt8(let minimum, let maximum, let step):
+            data.append(0x01)
+            data.appendPTPValue(.uint8(minimum))
+            data.appendPTPValue(.uint8(maximum))
+            data.appendPTPValue(.uint8(step))
+        case .enumUInt16(let values):
+            data.append(0x02)
+            data.appendLittleEndian(UInt16(values.count))
+            values.forEach { data.appendPTPValue(.uint16($0)) }
+        }
+        return data
+    }
+
+    enum TestPTPValue {
+        case uint8(UInt8)
+        case uint16(UInt16)
+    }
+
+    enum TestPTPForm {
+        case none
+        case rangeUInt8(minimum: UInt8, maximum: UInt8, step: UInt8)
+        case enumUInt16([UInt16])
     }
 }
 
@@ -209,5 +300,14 @@ private extension Data {
         let codeUnits = Array(string.utf16) + [0]
         append(UInt8(codeUnits.count))
         codeUnits.forEach { appendLittleEndian($0) }
+    }
+
+    mutating func appendPTPValue(_ value: PTPAllowlistTests.TestPTPValue) {
+        switch value {
+        case .uint8(let rawValue):
+            append(rawValue)
+        case .uint16(let rawValue):
+            appendLittleEndian(rawValue)
+        }
     }
 }

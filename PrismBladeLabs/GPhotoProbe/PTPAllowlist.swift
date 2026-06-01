@@ -235,11 +235,14 @@ struct PTPDeviceInfo: Equatable {
 
 enum PTPPayloadParseError: Error, Equatable, LocalizedError {
     case truncated(field: String, offset: Int)
+    case unsupportedDataType(UInt16, field: String)
 
     var errorDescription: String? {
         switch self {
         case .truncated(let field, let offset):
             return "PTP payload ended while parsing \(field) at byte offset \(offset)."
+        case .unsupportedDataType(let dataType, let field):
+            return "Unsupported PTP property data type \(PTPDeviceInfoParser.hex(dataType)) while parsing \(field)."
         }
     }
 }
@@ -328,6 +331,196 @@ enum PTPDevicePropertyCatalog {
             }
             return "UnknownProperty"
         }
+    }
+}
+
+struct PTPPropertyValue: Equatable {
+    var dataType: UInt16
+    var raw: String
+    var display: String
+}
+
+enum PTPDevicePropertyDataType {
+    static func name(for dataType: UInt16) -> String {
+        switch dataType {
+        case 0x0000: return "Undefined"
+        case 0x0001: return "Int8"
+        case 0x0002: return "UInt8"
+        case 0x0003: return "Int16"
+        case 0x0004: return "UInt16"
+        case 0x0005: return "Int32"
+        case 0x0006: return "UInt32"
+        case 0x0007: return "Int64"
+        case 0x0008: return "UInt64"
+        case 0x0009: return "Int128"
+        case 0x000A: return "UInt128"
+        case 0x4001: return "Int8Array"
+        case 0x4002: return "UInt8Array"
+        case 0x4003: return "Int16Array"
+        case 0x4004: return "UInt16Array"
+        case 0x4005: return "Int32Array"
+        case 0x4006: return "UInt32Array"
+        case 0x4007: return "Int64Array"
+        case 0x4008: return "UInt64Array"
+        case 0x4009: return "Int128Array"
+        case 0x400A: return "UInt128Array"
+        case 0xFFFF: return "String"
+        default: return "Unknown"
+        }
+    }
+}
+
+enum PTPDevicePropertyAccess: String, Equatable {
+    case readOnly
+    case readWrite
+    case unknown
+
+    init(rawValue: UInt8) {
+        switch rawValue {
+        case 0x00:
+            self = .readOnly
+        case 0x01:
+            self = .readWrite
+        default:
+            self = .unknown
+        }
+    }
+}
+
+enum PTPDevicePropertyForm: Equatable {
+    case none
+    case range(minimum: PTPPropertyValue, maximum: PTPPropertyValue, step: PTPPropertyValue)
+    case enumeration([PTPPropertyValue])
+    case unknown(UInt8)
+
+    var kind: String {
+        switch self {
+        case .none:
+            return "none"
+        case .range:
+            return "range"
+        case .enumeration:
+            return "enumeration"
+        case .unknown:
+            return "unknown"
+        }
+    }
+}
+
+struct PTPDevicePropDesc: Equatable {
+    var propertyCode: UInt16
+    var dataType: UInt16
+    var access: PTPDevicePropertyAccess
+    var factoryDefaultValue: PTPPropertyValue
+    var currentValue: PTPPropertyValue
+    var form: PTPDevicePropertyForm
+
+    func evidence(propertyCode expectedPropertyCode: UInt16? = nil) -> [String: String] {
+        var evidence = [
+            "descriptorPropertyCode": PTPDeviceInfoParser.hex(propertyCode),
+            "descriptorPropertyName": PTPDevicePropertyCatalog.name(for: propertyCode),
+            "propertyDataType": PTPDeviceInfoParser.hex(dataType),
+            "propertyDataTypeName": PTPDevicePropertyDataType.name(for: dataType),
+            "propertyAccess": access.rawValue,
+            "factoryDefaultRaw": factoryDefaultValue.raw,
+            "factoryDefaultDisplay": factoryDefaultValue.display,
+            "currentRaw": currentValue.raw,
+            "currentDisplay": currentValue.display,
+            "formKind": form.kind
+        ]
+
+        if let expectedPropertyCode {
+            evidence["descriptorMatchesRequest"] = expectedPropertyCode == propertyCode ? "true" : "false"
+        }
+
+        switch form {
+        case .none:
+            break
+        case .range(let minimum, let maximum, let step):
+            evidence["rangeMinimumRaw"] = minimum.raw
+            evidence["rangeMinimumDisplay"] = minimum.display
+            evidence["rangeMaximumRaw"] = maximum.raw
+            evidence["rangeMaximumDisplay"] = maximum.display
+            evidence["rangeStepRaw"] = step.raw
+            evidence["rangeStepDisplay"] = step.display
+        case .enumeration(let values):
+            evidence["allowedValueCount"] = "\(values.count)"
+            evidence["allowedValuesRaw"] = Self.join(values.map(\.raw))
+            evidence["allowedValuesDisplay"] = Self.join(values.map(\.display))
+        case .unknown(let rawFormFlag):
+            evidence["formFlag"] = PTPDeviceInfoParser.hex(UInt16(rawFormFlag))
+        }
+
+        return evidence
+    }
+
+    private static func join(_ values: [String], limit: Int = 40) -> String {
+        let visibleValues = values.prefix(limit).joined(separator: ",")
+        guard values.count > limit else { return visibleValues }
+        return "\(visibleValues),...+\(values.count - limit)"
+    }
+}
+
+enum PTPDevicePropDescParser {
+    static func parse(_ data: Data, expectedPropertyCode: UInt16? = nil) throws -> PTPDevicePropDesc {
+        var cursor = PTPPayloadCursor(data: data)
+        let propertyCode = try cursor.readUInt16(field: "propertyCode")
+        let dataType = try cursor.readUInt16(field: "dataType")
+        let access = PTPDevicePropertyAccess(rawValue: try cursor.readUInt8(field: "getSet"))
+        let factoryDefaultValue = try cursor.readPropertyValue(
+            dataType: dataType,
+            propertyCode: expectedPropertyCode ?? propertyCode,
+            field: "factoryDefaultValue"
+        )
+        let currentValue = try cursor.readPropertyValue(
+            dataType: dataType,
+            propertyCode: expectedPropertyCode ?? propertyCode,
+            field: "currentValue"
+        )
+        let formFlag = try cursor.readUInt8(field: "formFlag")
+        let form: PTPDevicePropertyForm
+        switch formFlag {
+        case 0x00:
+            form = .none
+        case 0x01:
+            form = .range(
+                minimum: try cursor.readPropertyValue(dataType: dataType, propertyCode: propertyCode, field: "range.minimum"),
+                maximum: try cursor.readPropertyValue(dataType: dataType, propertyCode: propertyCode, field: "range.maximum"),
+                step: try cursor.readPropertyValue(dataType: dataType, propertyCode: propertyCode, field: "range.step")
+            )
+        case 0x02:
+            let count = try cursor.readUInt16(field: "enumeration.count")
+            var values: [PTPPropertyValue] = []
+            values.reserveCapacity(Int(count))
+            for index in 0..<count {
+                values.append(
+                    try cursor.readPropertyValue(
+                        dataType: dataType,
+                        propertyCode: propertyCode,
+                        field: "enumeration[\(index)]"
+                    )
+                )
+            }
+            form = .enumeration(values)
+        default:
+            form = .unknown(formFlag)
+        }
+
+        return PTPDevicePropDesc(
+            propertyCode: propertyCode,
+            dataType: dataType,
+            access: access,
+            factoryDefaultValue: factoryDefaultValue,
+            currentValue: currentValue,
+            form: form
+        )
+    }
+}
+
+enum PTPDevicePropValueParser {
+    static func parse(_ data: Data, dataType: UInt16, propertyCode: UInt16) throws -> PTPPropertyValue {
+        var cursor = PTPPayloadCursor(data: data)
+        return try cursor.readPropertyValue(dataType: dataType, propertyCode: propertyCode, field: "value")
     }
 }
 
@@ -539,6 +732,13 @@ private extension Data {
             UInt32(littleEndian: buffer.loadUnaligned(fromByteOffset: offset, as: UInt32.self))
         }
     }
+
+    func readLittleEndianUInt64(at offset: Int) -> UInt64? {
+        guard count >= offset + MemoryLayout<UInt64>.size else { return nil }
+        return withUnsafeBytes { buffer in
+            UInt64(littleEndian: buffer.loadUnaligned(fromByteOffset: offset, as: UInt64.self))
+        }
+    }
 }
 
 private extension FixedWidthInteger {
@@ -564,12 +764,38 @@ private struct PTPPayloadCursor {
         return value
     }
 
+    mutating func readUInt8(field: String) throws -> UInt8 {
+        guard offset < data.count else {
+            throw PTPPayloadParseError.truncated(field: field, offset: offset)
+        }
+        let value = data[offset]
+        offset += 1
+        return value
+    }
+
     mutating func readUInt32(field: String) throws -> UInt32 {
         guard let value = data.readLittleEndianUInt32(at: offset) else {
             throw PTPPayloadParseError.truncated(field: field, offset: offset)
         }
         offset += 4
         return value
+    }
+
+    mutating func readUInt64(field: String) throws -> UInt64 {
+        guard let value = data.readLittleEndianUInt64(at: offset) else {
+            throw PTPPayloadParseError.truncated(field: field, offset: offset)
+        }
+        offset += 8
+        return value
+    }
+
+    mutating func readBytes(count: Int, field: String) throws -> Data {
+        guard data.count >= offset + count else {
+            throw PTPPayloadParseError.truncated(field: field, offset: offset)
+        }
+        let bytes = data.subdata(in: offset..<(offset + count))
+        offset += count
+        return bytes
     }
 
     mutating func readUInt16Array(field: String) throws -> [UInt16] {
@@ -614,5 +840,105 @@ private struct PTPPayloadCursor {
             }
         }
         return String(decoding: codeUnits, as: UTF16.self)
+    }
+
+    mutating func readPropertyValue(dataType: UInt16, propertyCode: UInt16, field: String) throws -> PTPPropertyValue {
+        if dataType >= 0x4001 && dataType <= 0x400A {
+            return try readArrayPropertyValue(dataType: dataType, propertyCode: propertyCode, field: field)
+        }
+
+        switch dataType {
+        case 0x0001:
+            let rawValue = Int8(bitPattern: try readUInt8(field: field))
+            return propertyValue(dataType: dataType, propertyCode: propertyCode, signed: Int64(rawValue))
+        case 0x0002:
+            return propertyValue(dataType: dataType, propertyCode: propertyCode, unsigned: UInt64(try readUInt8(field: field)))
+        case 0x0003:
+            let rawValue = Int16(bitPattern: try readUInt16(field: field))
+            return propertyValue(dataType: dataType, propertyCode: propertyCode, signed: Int64(rawValue))
+        case 0x0004:
+            return propertyValue(dataType: dataType, propertyCode: propertyCode, unsigned: UInt64(try readUInt16(field: field)))
+        case 0x0005:
+            let rawValue = Int32(bitPattern: try readUInt32(field: field))
+            return propertyValue(dataType: dataType, propertyCode: propertyCode, signed: Int64(rawValue))
+        case 0x0006:
+            return propertyValue(dataType: dataType, propertyCode: propertyCode, unsigned: UInt64(try readUInt32(field: field)))
+        case 0x0007:
+            let rawValue = Int64(bitPattern: try readUInt64(field: field))
+            return propertyValue(dataType: dataType, propertyCode: propertyCode, signed: rawValue)
+        case 0x0008:
+            return propertyValue(dataType: dataType, propertyCode: propertyCode, unsigned: try readUInt64(field: field))
+        case 0x0009, 0x000A:
+            let bytes = try readBytes(count: 16, field: field)
+            let raw = hex(bytes)
+            return PTPPropertyValue(dataType: dataType, raw: raw, display: raw)
+        case 0xFFFF:
+            let value = try readString(field: field)
+            return PTPPropertyValue(dataType: dataType, raw: value, display: value)
+        default:
+            throw PTPPayloadParseError.unsupportedDataType(dataType, field: field)
+        }
+    }
+
+    private mutating func readArrayPropertyValue(dataType: UInt16, propertyCode: UInt16, field: String) throws -> PTPPropertyValue {
+        let count = try readUInt32(field: "\(field).count")
+        let scalarDataType = dataType - 0x4000
+        var values: [PTPPropertyValue] = []
+        values.reserveCapacity(Int(min(count, 1024)))
+        for index in 0..<count {
+            values.append(
+                try readPropertyValue(
+                    dataType: scalarDataType,
+                    propertyCode: propertyCode,
+                    field: "\(field)[\(index)]"
+                )
+            )
+        }
+        let raw = values.map(\.raw).joined(separator: ",")
+        let display = values.map(\.display).joined(separator: ",")
+        return PTPPropertyValue(dataType: dataType, raw: "[\(raw)]", display: "[\(display)]")
+    }
+
+    private func propertyValue(
+        dataType: UInt16,
+        propertyCode: UInt16,
+        signed: Int64? = nil,
+        unsigned: UInt64? = nil
+    ) -> PTPPropertyValue {
+        let raw = signed.map(String.init) ?? unsigned.map(String.init) ?? ""
+        let display = displayValue(propertyCode: propertyCode, signed: signed, unsigned: unsigned, fallback: raw)
+        return PTPPropertyValue(dataType: dataType, raw: raw, display: display)
+    }
+
+    private func displayValue(
+        propertyCode: UInt16,
+        signed: Int64?,
+        unsigned: UInt64?,
+        fallback: String
+    ) -> String {
+        switch propertyCode {
+        case 0x5001:
+            guard let unsigned else { return fallback }
+            return "\(unsigned)%"
+        case 0x5007:
+            guard let unsigned else { return fallback }
+            return "f/\(Self.formatDecimal(Double(unsigned) / 100.0))"
+        case 0x500F:
+            guard let unsigned else { return fallback }
+            return "ISO \(unsigned)"
+        default:
+            return fallback
+        }
+    }
+
+    private static func formatDecimal(_ value: Double) -> String {
+        if value.rounded() == value {
+            return "\(Int(value))"
+        }
+        return String(format: "%.1f", value)
+    }
+
+    private func hex(_ data: Data) -> String {
+        data.map { String(format: "%02X", $0) }.joined()
     }
 }

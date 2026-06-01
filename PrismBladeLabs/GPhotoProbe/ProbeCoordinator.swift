@@ -157,8 +157,29 @@ struct ReadOnlyProbeSuite {
         let propertyCodes = deviceInfo?.probePropertyCodes() ?? [0x5001]
         for propertyCode in propertyCodes {
             let parameter = UInt32(propertyCode)
-            record(await ptpClient.send(.getDevicePropDesc, probeCommand: .listConfig, parameters: [parameter], transport: transport))
-            record(await ptpClient.send(.getDevicePropValue, probeCommand: .getConfig, parameters: [parameter], transport: transport))
+            let descOutcome = await ptpClient.sendDetailed(.getDevicePropDesc, probeCommand: .listConfig, parameters: [parameter], transport: transport)
+            var descResult = descOutcome.result
+            let propDesc = parseDevicePropDesc(from: descOutcome.response, propertyCode: propertyCode)
+            if let propDesc {
+                descResult.message = "PTP property descriptor parsed from read-only round-trip."
+                descResult.evidence.merge(propDesc.evidence(propertyCode: propertyCode)) { _, new in new }
+            } else if descResult.status == .passed {
+                descResult.evidence["devicePropDescParse"] = "unavailable"
+            }
+            record(descResult)
+
+            let valueOutcome = await ptpClient.sendDetailed(.getDevicePropValue, probeCommand: .getConfig, parameters: [parameter], transport: transport)
+            var valueResult = valueOutcome.result
+            if let propDesc, let value = parseDevicePropValue(from: valueOutcome.response, propDesc: propDesc) {
+                valueResult.message = "PTP property value parsed from read-only round-trip."
+                valueResult.evidence["propertyDataType"] = PTPDeviceInfoParser.hex(propDesc.dataType)
+                valueResult.evidence["propertyDataTypeName"] = PTPDevicePropertyDataType.name(for: propDesc.dataType)
+                valueResult.evidence["valueRaw"] = value.raw
+                valueResult.evidence["valueDisplay"] = value.display
+            } else if valueResult.status == .passed {
+                valueResult.evidence["devicePropValueParse"] = "unavailable"
+            }
+            record(valueResult)
         }
         record(await eventStatus.observeStatus())
         record(ProbeResult(command: .eventObservation, status: .inconclusive, message: "PTP event observation is bounded and does not enable tethering.", failureLayer: .iOSAPI))
@@ -219,5 +240,19 @@ struct ReadOnlyProbeSuite {
     private func parseDeviceInfo(from response: PTPTransportResponse?) -> PTPDeviceInfo? {
         guard let response, !response.payloadData.isEmpty else { return nil }
         return try? PTPDeviceInfoParser.parse(response.payloadData)
+    }
+
+    private func parseDevicePropDesc(from response: PTPTransportResponse?, propertyCode: UInt16) -> PTPDevicePropDesc? {
+        guard let response, !response.payloadData.isEmpty else { return nil }
+        return try? PTPDevicePropDescParser.parse(response.payloadData, expectedPropertyCode: propertyCode)
+    }
+
+    private func parseDevicePropValue(from response: PTPTransportResponse?, propDesc: PTPDevicePropDesc) -> PTPPropertyValue? {
+        guard let response, !response.payloadData.isEmpty else { return nil }
+        return try? PTPDevicePropValueParser.parse(
+            response.payloadData,
+            dataType: propDesc.dataType,
+            propertyCode: propDesc.propertyCode
+        )
     }
 }

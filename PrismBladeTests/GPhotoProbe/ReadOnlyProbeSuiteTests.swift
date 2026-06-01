@@ -71,7 +71,29 @@ final class ReadOnlyProbeSuiteTests: XCTestCase {
         let store = ProbeLogStore()
         let transport = SpyPTPTransport(
             canAcceptPTPCommands: true,
-            deviceInfoPayload: Self.deviceInfoPayload(properties: [0x5001, 0x5007])
+            deviceInfoPayload: Self.deviceInfoPayload(properties: [0x5001, 0x5007]),
+            propDescPayloads: [
+                0x5001: Self.devicePropDescPayload(
+                    propertyCode: 0x5001,
+                    dataType: 0x0002,
+                    access: 0x00,
+                    factoryDefault: .uint8(100),
+                    current: .uint8(87),
+                    form: .rangeUInt8(minimum: 0, maximum: 100, step: 1)
+                ),
+                0x5007: Self.devicePropDescPayload(
+                    propertyCode: 0x5007,
+                    dataType: 0x0004,
+                    access: 0x01,
+                    factoryDefault: .uint16(280),
+                    current: .uint16(560),
+                    form: .enumUInt16([280, 400, 560])
+                )
+            ],
+            propValuePayloads: [
+                0x5001: Self.propertyValuePayload(.uint8(87)),
+                0x5007: Self.propertyValuePayload(.uint16(560))
+            ]
         )
         let suite = ReadOnlyProbeSuite(
             discovery: FakeDiscoveryProbe(transport: transport),
@@ -85,6 +107,19 @@ final class ReadOnlyProbeSuiteTests: XCTestCase {
         XCTAssertEqual(propertyPackets.map(\.parameters), [[0x5001], [0x5001], [0x5007], [0x5007]])
         XCTAssertEqual(results.first { $0.command == .abilities }?.evidence["supportedDeviceProperties"], "0x5001,0x5007")
         XCTAssertTrue(results.contains { $0.evidence["devicePropertyName"] == "FNumber" })
+
+        let fNumberDesc = results.first {
+            $0.command == .listConfig && $0.evidence["devicePropertyName"] == "FNumber"
+        }
+        XCTAssertEqual(fNumberDesc?.evidence["currentDisplay"], "f/5.6")
+        XCTAssertEqual(fNumberDesc?.evidence["allowedValueCount"], "3")
+        XCTAssertEqual(fNumberDesc?.evidence["allowedValuesDisplay"], "f/2.8,f/4,f/5.6")
+
+        let fNumberValue = results.first {
+            $0.command == .getConfig && $0.evidence["devicePropertyName"] == "FNumber"
+        }
+        XCTAssertEqual(fNumberValue?.evidence["valueRaw"], "560")
+        XCTAssertEqual(fNumberValue?.evidence["valueDisplay"], "f/5.6")
     }
 
     func testVideoPathProbeIsPresenceOnlyAndInconclusiveSafe() async {
@@ -111,6 +146,53 @@ final class ReadOnlyProbeSuiteTests: XCTestCase {
         data.appendPTPString("1.00")
         data.appendPTPString("SERIAL-1234")
         return data
+    }
+
+    static func devicePropDescPayload(
+        propertyCode: UInt16,
+        dataType: UInt16,
+        access: UInt8,
+        factoryDefault: TestPTPValue,
+        current: TestPTPValue,
+        form: TestPTPForm
+    ) -> Data {
+        var data = Data()
+        data.appendLittleEndian(propertyCode)
+        data.appendLittleEndian(dataType)
+        data.append(access)
+        data.appendPTPValue(factoryDefault)
+        data.appendPTPValue(current)
+        switch form {
+        case .none:
+            data.append(0x00)
+        case .rangeUInt8(let minimum, let maximum, let step):
+            data.append(0x01)
+            data.appendPTPValue(.uint8(minimum))
+            data.appendPTPValue(.uint8(maximum))
+            data.appendPTPValue(.uint8(step))
+        case .enumUInt16(let values):
+            data.append(0x02)
+            data.appendLittleEndian(UInt16(values.count))
+            values.forEach { data.appendPTPValue(.uint16($0)) }
+        }
+        return data
+    }
+
+    static func propertyValuePayload(_ value: TestPTPValue) -> Data {
+        var data = Data()
+        data.appendPTPValue(value)
+        return data
+    }
+
+    enum TestPTPValue {
+        case uint8(UInt8)
+        case uint16(UInt16)
+    }
+
+    enum TestPTPForm {
+        case none
+        case rangeUInt8(minimum: UInt8, maximum: UInt8, step: UInt8)
+        case enumUInt16([UInt16])
     }
 }
 
@@ -174,13 +256,23 @@ private final class SpyPTPTransport: PTPHardwareTransport {
     let canAcceptPTPCommands: Bool
     let responseCode: UInt16
     let deviceInfoPayload: Data
+    let propDescPayloads: [UInt16: Data]
+    let propValuePayloads: [UInt16: Data]
     private(set) var sendCallCount = 0
     private(set) var sentPackets: [PTPCommandPacket] = []
 
-    init(canAcceptPTPCommands: Bool, responseCode: UInt16 = 0x2001, deviceInfoPayload: Data = Data([0x00])) {
+    init(
+        canAcceptPTPCommands: Bool,
+        responseCode: UInt16 = 0x2001,
+        deviceInfoPayload: Data = Data([0x00]),
+        propDescPayloads: [UInt16: Data] = [:],
+        propValuePayloads: [UInt16: Data] = [:]
+    ) {
         self.canAcceptPTPCommands = canAcceptPTPCommands
         self.responseCode = responseCode
         self.deviceInfoPayload = deviceInfoPayload
+        self.propDescPayloads = propDescPayloads
+        self.propValuePayloads = propValuePayloads
     }
 
     func sendAllowlistedPTPCommand(_ packet: PTPCommandPacket) async throws -> PTPTransportResponse {
@@ -188,9 +280,21 @@ private final class SpyPTPTransport: PTPHardwareTransport {
         sentPackets.append(packet)
         return PTPTransportResponse(
             responseContainer: Self.responseContainer(code: responseCode, transactionID: packet.transactionID),
-            payloadData: packet.command == .getDeviceInfo ? deviceInfoPayload : Data([0x00]),
+            payloadData: payload(for: packet),
             durationMilliseconds: 3
         )
+    }
+
+    private func payload(for packet: PTPCommandPacket) -> Data {
+        let propertyCode = packet.parameters.first.map(UInt16.init(truncatingIfNeeded:))
+        switch packet.command {
+        case .getDeviceInfo:
+            return deviceInfoPayload
+        case .getDevicePropDesc:
+            return propertyCode.flatMap { propDescPayloads[$0] } ?? Data([0x00])
+        case .getDevicePropValue:
+            return propertyCode.flatMap { propValuePayloads[$0] } ?? Data([0x00])
+        }
     }
 
     private static func responseContainer(code: UInt16, transactionID: UInt32) -> Data {
@@ -218,5 +322,14 @@ private extension Data {
         let codeUnits = Array(string.utf16) + [0]
         append(UInt8(codeUnits.count))
         codeUnits.forEach { appendLittleEndian($0) }
+    }
+
+    mutating func appendPTPValue(_ value: ReadOnlyProbeSuiteTests.TestPTPValue) {
+        switch value {
+        case .uint8(let rawValue):
+            append(rawValue)
+        case .uint16(let rawValue):
+            appendLittleEndian(rawValue)
+        }
     }
 }
