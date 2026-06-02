@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MonitorScreen: View {
     @ObservedObject var session: MonitorSession
+    var onRealCameraModeChange: (Bool) -> Void = { _ in }
     @State private var activeSheet: MonitorSheet?
     // v0.1.3 将参数浮层状态上移到父级，便于预览区点击关闭和 Scope 动态避让共享状态。
     @State private var selectedCameraParameter: CameraParameter?
@@ -35,6 +36,12 @@ struct MonitorScreen: View {
                 .onTapGesture {
                     // 点击监看画面空白处只负责收起参数浮层，不改变任何相机状态。
                     selectedCameraParameter = nil
+                }
+
+                if session.isRealCameraMode, let prompt = session.state.connection.previewPrompt {
+                    CameraConnectionPrompt(title: prompt.title, message: prompt.message)
+                        .padding(.horizontal, usePortraitLayout ? 24 : 80)
+                        .padding(.bottom, controlsAvoidance + 28)
                 }
 
                 VStack(spacing: 0) {
@@ -72,7 +79,7 @@ struct MonitorScreen: View {
             .sheet(item: $activeSheet) { sheet in
                 switch sheet {
                 case .settings:
-                    SettingsScreen(session: session)
+                    SettingsScreen(session: session, onRealCameraModeChange: onRealCameraModeChange)
                 case .lutManager:
                     LUTManagerScreen(session: session)
                 }
@@ -362,6 +369,29 @@ struct MonitorScreen: View {
         }
 
         session.toggleLUTPreview()
+    }
+}
+
+private struct CameraConnectionPrompt: View {
+    var title: String
+    var message: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "cable.connector.slash")
+                .font(.system(size: 28, weight: .semibold))
+            Text(title)
+                .font(.headline.weight(.semibold))
+            Text(message)
+                .font(.callout)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white.opacity(0.76))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background(.black.opacity(0.62))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

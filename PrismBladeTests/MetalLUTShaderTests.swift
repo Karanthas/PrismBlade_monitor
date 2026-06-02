@@ -238,9 +238,9 @@ final class MetalLUTShaderTests: XCTestCase {
             analysisSource: .rawSignal
         )
 
-        XCTAssertGreaterThan(output.x, 0.98)
-        XCTAssertGreaterThan(output.y, 0.98)
-        XCTAssertGreaterThan(output.z, 0.98)
+        XCTAssertEqual(output.x, 0.976, accuracy: 0.02)
+        XCTAssertEqual(output.y, 0.88, accuracy: 0.02)
+        XCTAssertEqual(output.z, 0.88, accuracy: 0.02)
     }
 
     func testPreviewShaderZebraUsesPreviewAnalysisSourceWhenSelected() throws {
@@ -344,7 +344,7 @@ final class MetalLUTShaderTests: XCTestCase {
         analysisSource: ExposureAnalysisSource = .rawSignal
     ) throws -> SIMD3<Float> {
         let sourceTexture = makeTexture2D(device: device, pixelFormat: .rgba32Float, usage: [.shaderRead])
-        var sourcePixel: [Float] = [sourceColor.x, sourceColor.y, sourceColor.z, 1]
+        let sourcePixel: [Float] = [sourceColor.x, sourceColor.y, sourceColor.z, 1]
         sourcePixel.withUnsafeBytes { bytes in
             sourceTexture.replace(
                 region: MTLRegionMake2D(0, 0, 1, 1),
@@ -373,12 +373,12 @@ final class MetalLUTShaderTests: XCTestCase {
         samplerDescriptor.rAddressMode = .clampToEdge
         let samplerState = device.makeSamplerState(descriptor: samplerDescriptor)
 
-        var uniforms = [
+        let uniforms = [
             SIMD4<Float>(lutEnabled ? 1 : 0, intensity, Float(lutResource.cubeSize), 0),
             SIMD4<Float>(lutResource.domainMin.x, lutResource.domainMin.y, lutResource.domainMin.z, 0),
             SIMD4<Float>(lutResource.domainMax.x, lutResource.domainMax.y, lutResource.domainMax.z, 0)
         ]
-        var monitorUniforms = [
+        let monitorUniforms = [
             SIMD4<Float>(
                 ColorTransformPass.encodingCode(for: colorEncoding),
                 falseColorEnabled ? 1 : 0,

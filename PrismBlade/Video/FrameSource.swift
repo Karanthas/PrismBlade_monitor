@@ -13,10 +13,25 @@ protocol FrameSource {
     func frames() -> AsyncStream<VideoFrame>
 }
 
+protocol FrameSourceConnectionLossReporting {
+    var didFailFromConnectionLoss: Bool { get }
+}
+
 enum FrameSourceStatus: Equatable {
     case stopped
     case running
     case failed(String)
+
+    var diagnosticName: String {
+        switch self {
+        case .stopped:
+            return "stopped"
+        case .running:
+            return "running"
+        case .failed:
+            return "failed"
+        }
+    }
 }
 
 struct FrameFormat: Equatable, Sendable {

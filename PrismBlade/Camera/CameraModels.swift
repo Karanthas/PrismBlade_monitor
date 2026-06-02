@@ -77,6 +77,13 @@ struct CameraParameterAvailability: Equatable {
     static let enabled = CameraParameterAvailability(isEnabled: true, reason: nil)
 }
 
+struct CameraActionAvailability: Equatable {
+    var isEnabled: Bool
+    var reason: String?
+
+    static let enabled = CameraActionAvailability(isEnabled: true, reason: nil)
+}
+
 struct StorageInfo: Equatable {
     var minutes: Int
     var cardLabel: String
@@ -158,6 +165,19 @@ enum CameraAction {
     case capture
     case halfPress
     case focus
+
+    var diagnosticName: String {
+        switch self {
+        case .toggleRecord:
+            return "toggleRecord"
+        case .capture:
+            return "capture"
+        case .halfPress:
+            return "halfPress"
+        case .focus:
+            return "focus"
+        }
+    }
 
     var successMessage: String {
         switch self {

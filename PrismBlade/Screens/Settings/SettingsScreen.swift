@@ -1,8 +1,11 @@
 import SwiftUI
+import UIKit
 
 struct SettingsScreen: View {
     @ObservedObject var session: MonitorSession
+    var onRealCameraModeChange: (Bool) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
+    @State private var diagnosticsCopyStatus: String?
 
     var body: some View {
         NavigationStack {
@@ -12,6 +15,17 @@ struct SettingsScreen: View {
                         get: { session.state.orientation.allowsPortraitMonitoring },
                         set: { session.setPortraitMonitoringAllowed($0) }
                     ))
+                }
+
+                Section("相机模式") {
+                    Toggle("真实相机模式", isOn: Binding(
+                        get: { session.isRealCameraMode },
+                        set: { onRealCameraModeChange($0) }
+                    ))
+
+                    Text(session.isRealCameraMode ? "当前使用 ImageCaptureCore / Nikon PTP 连接。" : "当前使用 Mock 相机和模拟画面。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("曝光辅助") {
@@ -88,15 +102,37 @@ struct SettingsScreen: View {
                     }
                 }
 
-                Section("Mock 调试") {
-                    Button("重新连接 Mock 相机") {
-                        session.reconnectMockCamera()
+                Section(session.isRealCameraMode ? "相机连接" : "Mock 调试") {
+                    Button(session.isRealCameraMode ? "重新连接相机" : "重新连接 Mock 相机") {
+                        session.reconnectCamera()
                     }
 
-                    Button("模拟断开") {
-                        session.simulateMockDisconnect()
+                    if !session.isRealCameraMode {
+                        Button("模拟断开") {
+                            session.simulateMockDisconnect()
+                        }
+                        .foregroundStyle(.red)
+                    }
+                }
+
+                Section("诊断日志") {
+                    Button("复制日志") {
+                        UIPasteboard.general.string = session.diagnosticLogText()
+                        diagnosticsCopyStatus = "已复制到剪贴板"
+                        session.showUserMessage("诊断日志已复制")
+                    }
+
+                    Button("清空日志") {
+                        session.clearDiagnosticLog()
+                        diagnosticsCopyStatus = "已清空"
                     }
                     .foregroundStyle(.red)
+
+                    if let diagnosticsCopyStatus {
+                        Text(diagnosticsCopyStatus)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("设置")

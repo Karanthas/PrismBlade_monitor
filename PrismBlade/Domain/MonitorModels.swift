@@ -30,9 +30,13 @@ struct ScopeData: Equatable {
 
 enum ConnectionState: Equatable {
     case disconnected
+    case noCamera
     case searching
     case connecting
+    case reconnecting(attempt: Int)
     case connected
+    case permissionDenied(String)
+    case unsupported(String)
     case interrupted(String)
     case failed(String)
 
@@ -40,12 +44,20 @@ enum ConnectionState: Equatable {
         switch self {
         case .disconnected:
             return "未连接"
+        case .noCamera:
+            return "等待相机"
         case .searching:
             return "搜索中"
         case .connecting:
             return "连接中"
+        case .reconnecting:
+            return "重连中"
         case .connected:
-            return "Mock 已连接"
+            return "已连接"
+        case .permissionDenied:
+            return "相机权限受限"
+        case .unsupported:
+            return "相机不支持"
         case .interrupted:
             return "连接中断"
         case .failed:
@@ -56,6 +68,52 @@ enum ConnectionState: Equatable {
     var isConnected: Bool {
         if case .connected = self { return true }
         return false
+    }
+
+    var diagnosticName: String {
+        switch self {
+        case .disconnected:
+            return "disconnected"
+        case .noCamera:
+            return "noCamera"
+        case .searching:
+            return "searching"
+        case .connecting:
+            return "connecting"
+        case .reconnecting:
+            return "reconnecting"
+        case .connected:
+            return "connected"
+        case .permissionDenied:
+            return "permissionDenied"
+        case .unsupported:
+            return "unsupported"
+        case .interrupted:
+            return "interrupted"
+        case .failed:
+            return "failed"
+        }
+    }
+
+    var previewPrompt: (title: String, message: String)? {
+        switch self {
+        case .noCamera:
+            return ("连接 Nikon Z6III", "请连接已验证的 Nikon Z6III USB/PTP 相机。")
+        case .permissionDenied(let message):
+            return ("允许相机权限", message)
+        case .unsupported(let message):
+            return ("相机不可用", message)
+        case .failed(let message):
+            return ("连接失败", message)
+        case .interrupted(let message):
+            return ("连接中断", message)
+        case .searching:
+            return ("正在搜索相机", "正在等待 Nikon Z6III 出现。")
+        case .reconnecting(let attempt):
+            return ("正在重连相机", "正在尝试恢复 Nikon Z6III 连接（第 \(attempt) 次）。")
+        default:
+            return nil
+        }
     }
 }
 

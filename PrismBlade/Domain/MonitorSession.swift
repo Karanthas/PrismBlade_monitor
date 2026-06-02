@@ -1,6 +1,20 @@
 import Foundation
 import SwiftUI
 
+enum MonitorCameraMode: Equatable {
+    case mock
+    case realCamera
+
+    var diagnosticName: String {
+        switch self {
+        case .mock:
+            return "mock"
+        case .realCamera:
+            return "realCamera"
+        }
+    }
+}
+
 @MainActor
 final class MonitorSession: ObservableObject {
     // MonitorSession 是主 UI 状态容器；所有 @Published 更新固定在 MainActor，避免 SwiftUI 跨线程刷新。
@@ -13,22 +27,47 @@ final class MonitorSession: ObservableObject {
     private let frameSource: FrameSource
     private let cameraService: CameraCommandService
     private let lutRepository: LUTRepository
+    private let cameraMode: MonitorCameraMode
+    private let diagnosticsLog: AppDiagnosticsLog
     private let defaults = UserDefaults.standard
 
     private var frameTask: Task<Void, Never>?
     private var cameraEventTask: Task<Void, Never>?
     private var messageClearTask: Task<Void, Never>?
+    private var reconnectAttemptCount = 0
+    private let maximumReconnectAttempts = 2
+    private var monitoringGeneration = 0
 
     init(
         frameSource: FrameSource,
         cameraService: CameraCommandService,
-        lutRepository: LUTRepository
+        lutRepository: LUTRepository,
+        cameraMode: MonitorCameraMode = .mock,
+        diagnosticsLog: AppDiagnosticsLog = AppDiagnosticsLog()
     ) {
         self.frameSource = frameSource
         self.cameraService = cameraService
         self.lutRepository = lutRepository
+        self.cameraMode = cameraMode
+        self.diagnosticsLog = diagnosticsLog
         lutStore = LUTStore(repository: lutRepository)
         restorePersistentState()
+        diagnosticsLog.record("monitor.session.created", fields: [
+            "cameraMode": cameraMode.diagnosticName
+        ])
+    }
+
+    var isRealCameraMode: Bool {
+        cameraMode == .realCamera
+    }
+
+    func diagnosticLogText() -> String {
+        diagnosticsLog.exportText()
+    }
+
+    func clearDiagnosticLog() {
+        diagnosticsLog.clear()
+        showUserMessage("诊断日志已清空")
     }
 
     deinit {
@@ -38,30 +77,22 @@ final class MonitorSession: ObservableObject {
     }
 
     func startMonitoring() {
-        guard frameTask == nil else { return }
+        guard frameTask == nil, cameraEventTask == nil else { return }
+        reconnectAttemptCount = 0
+        monitoringGeneration += 1
+        let generation = monitoringGeneration
+        diagnosticsLog.record("monitor.start", fields: [
+            "cameraMode": cameraMode.diagnosticName,
+            "generation": "\(generation)"
+        ])
 
-        // 帧源与相机 Mock 分开启动：以后真实 live view 失败时，UI 仍可显示错误状态。
-        frameTask = Task { [weak self] in
-            guard let self else { return }
-            do {
-                try await frameSource.start()
-                for await frame in frameSource.frames() {
-                    await MainActor.run {
-                        // 每一帧只替换 latestFrame，图像处理状态仍由 MonitorState 独立控制。
-                        self.latestFrame = frame
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    self.showUserMessage("帧源启动失败：\(error.localizedDescription)")
-                }
+        switch cameraMode {
+        case .mock:
+            startMockMonitoring(generation: generation)
+        case .realCamera:
+            cameraEventTask = Task { [weak self] in
+                await self?.startRealCameraMonitoring(generation: generation)
             }
-        }
-
-        cameraEventTask = Task { [weak self] in
-            guard let self else { return }
-            // Mock 相机连接不阻塞帧源启动，避免连接失败时监看画面也无法显示。
-            await self.connectMockCamera()
         }
     }
 
@@ -70,6 +101,11 @@ final class MonitorSession: ObservableObject {
         frameTask = nil
         cameraEventTask?.cancel()
         cameraEventTask = nil
+        reconnectAttemptCount = 0
+        monitoringGeneration += 1
+        diagnosticsLog.record("monitor.stop", fields: [
+            "generation": "\(monitoringGeneration)"
+        ])
 
         Task {
             await frameSource.stop()
@@ -179,7 +215,7 @@ final class MonitorSession: ObservableObject {
     func availability(for parameter: CameraParameter) -> CameraParameterAvailability {
         guard state.connection.isConnected else {
             // 未连接时所有参数禁用，但保留原因用于点击置灰项后的短提示。
-            return CameraParameterAvailability(isEnabled: false, reason: "Mock 相机未连接")
+            return CameraParameterAvailability(isEnabled: false, reason: "相机未连接")
         }
 
         let value = cameraValue(for: parameter)
@@ -191,6 +227,23 @@ final class MonitorSession: ObservableObject {
         // 当前曝光模式是第二层限制，例如 A 档锁快门、S 档锁光圈。
         let exposureMode = ExposureMode(rawValue: state.camera.exposureMode.current) ?? .manual
         return CameraExposureRules.availability(for: parameter, in: exposureMode)
+    }
+
+    func availability(for action: CameraAction) -> CameraActionAvailability {
+        guard state.connection.isConnected else {
+            return CameraActionAvailability(isEnabled: false, reason: "相机未连接")
+        }
+
+        guard cameraMode == .mock else {
+            switch action {
+            case .toggleRecord, .capture:
+                return CameraActionAvailability(isEnabled: false, reason: "真实相机模式暂不启用 REC/拍照")
+            case .halfPress, .focus:
+                return CameraActionAvailability(isEnabled: false, reason: "真实相机对焦动作等待验证")
+            }
+        }
+
+        return .enabled
     }
 
     func showDisabledParameterReason(for parameter: CameraParameter) {
@@ -208,6 +261,7 @@ final class MonitorSession: ObservableObject {
         }
 
         lastUserMessage = message
+        diagnosticsLog.record("ui.message", fields: ["message": message])
         let messageSnapshot = message
 
         messageClearTask = Task { [weak self] in
@@ -247,66 +301,327 @@ final class MonitorSession: ObservableObject {
         guard availability.isEnabled else {
             // UI 层提交前先拦一次，降低无效 async 命令和错误噪音。
             showUserMessage(availability.reason)
+            diagnosticsLog.record("camera.parameter.blocked", fields: [
+                "parameter": parameter.rawValue,
+                "reason": availability.reason ?? ""
+            ])
             return
         }
 
         markCameraParameter(parameter, isSubmitting: true)
+        diagnosticsLog.record("camera.parameter.submit", fields: [
+            "parameter": parameter.rawValue,
+            "value": value
+        ])
 
         Task {
             do {
                 // 真正写入仍通过 CameraCommandService，确保 UI 不直接依赖 Mock transport。
                 let updated = try await cameraService.setValue(value, for: parameter)
                 state.camera = updated
-                if parameter == .exposureMode {
+                diagnosticsLog.record("camera.parameter.succeeded", fields: [
+                    "parameter": parameter.rawValue,
+                    "value": value
+                ])
+                if cameraMode == .mock, parameter == .exposureMode {
                     // 只持久化 Mock 模式，方便模拟器复现；真实相机接入时必须以相机读取值为准。
                     defaults.set(value, forKey: DefaultsKey.mockExposureMode)
                 }
             } catch {
                 showUserMessage("相机参数提交失败：\(error.localizedDescription)")
+                diagnosticsLog.record("camera.parameter.failed", fields: [
+                    "parameter": parameter.rawValue,
+                    "value": value,
+                    "errorType": String(describing: type(of: error)),
+                    "error": error.localizedDescription
+                ])
                 markCameraParameter(parameter, isSubmitting: false)
             }
         }
     }
 
     func triggerCameraAction(_ action: CameraAction) {
+        let availability = availability(for: action)
+        guard availability.isEnabled else {
+            showUserMessage(availability.reason)
+            diagnosticsLog.record("camera.action.blocked", fields: [
+                "action": action.diagnosticName,
+                "reason": availability.reason ?? ""
+            ])
+            return
+        }
+
         Task {
             do {
                 // 录制、拍照、对焦统一走 action 通道，避免伪装成普通参数写入。
                 let updated = try await cameraService.trigger(action)
                 state.camera = updated
                 showUserMessage(action.successMessage)
+                diagnosticsLog.record("camera.action.succeeded", fields: [
+                    "action": action.diagnosticName
+                ])
             } catch {
                 showUserMessage("相机动作失败：\(error.localizedDescription)")
+                diagnosticsLog.record("camera.action.failed", fields: [
+                    "action": action.diagnosticName,
+                    "errorType": String(describing: type(of: error)),
+                    "error": error.localizedDescription
+                ])
             }
         }
     }
 
     func reconnectMockCamera() {
-        Task { await connectMockCamera() }
+        reconnectCamera()
+    }
+
+    func reconnectCamera() {
+        switch cameraMode {
+        case .mock:
+            let generation = monitoringGeneration
+            Task { await connectCameraForCurrentMode(generation: generation) }
+        case .realCamera:
+            cameraEventTask?.cancel()
+            cameraEventTask = nil
+            reconnectAttemptCount = 0
+            monitoringGeneration += 1
+            let generation = monitoringGeneration
+            diagnosticsLog.record("camera.reconnect.manual", fields: [
+                "cameraMode": cameraMode.diagnosticName,
+                "generation": "\(generation)"
+            ])
+            cameraEventTask = Task { [weak self] in
+                guard let self else { return }
+                await self.frameSource.stop()
+                await self.cameraService.disconnect()
+                await self.startRealCameraMonitoring(generation: generation)
+            }
+        }
     }
 
     func simulateMockDisconnect() {
         Task {
             await cameraService.disconnect()
-            state.connection = .interrupted("Mock 断开")
+            setConnection(.interrupted("Mock 断开"), reason: "simulateMockDisconnect")
         }
     }
 
-    private func connectMockCamera() async {
-        state.connection = .connecting
+    private func startMockMonitoring(generation: Int) {
+        frameTask = Task { [weak self] in
+            guard let self else { return }
+            await self.startFrameSource(reconnectOnFailure: false, generation: generation)
+        }
+
+        cameraEventTask = Task { [weak self] in
+            await self?.connectCameraForCurrentMode(generation: generation)
+        }
+    }
+
+    private func startRealCameraMonitoring(generation: Int) async {
+        diagnosticsLog.record("camera.real.start", fields: ["generation": "\(generation)"])
+        await connectCameraForCurrentMode(generation: generation)
+        guard isCurrentMonitoringGeneration(generation), state.connection.isConnected else { return }
+        await startFrameSource(reconnectOnFailure: true, generation: generation)
+    }
+
+    private func startFrameSource(reconnectOnFailure: Bool, generation: Int) async {
+        guard isCurrentMonitoringGeneration(generation) else { return }
+        let stream = frameSource.frames()
+        diagnosticsLog.record("frameSource.starting", fields: [
+            "reconnectOnFailure": reconnectOnFailure ? "true" : "false",
+            "generation": "\(generation)"
+        ])
+        do {
+            try await frameSource.start()
+            guard isCurrentMonitoringGeneration(generation) else {
+                await frameSource.stop()
+                return
+            }
+            diagnosticsLog.record("frameSource.started", fields: [
+                "status": frameSource.status.diagnosticName,
+                "generation": "\(generation)"
+            ])
+
+            for await frame in stream {
+                guard isCurrentMonitoringGeneration(generation) else { break }
+                // 每一帧只替换 latestFrame，图像处理状态仍由 MonitorState 独立控制。
+                latestFrame = frame
+            }
+
+            guard isCurrentMonitoringGeneration(generation) else { return }
+            if case .failed(let reason) = frameSource.status {
+                if reconnectOnFailure, frameSourceFailureIsConnectionLoss() {
+                    await handleRealCameraInterruption(reason: reason, generation: generation)
+                } else {
+                    showUserMessage("实时取景失败：\(reason)")
+                    diagnosticsLog.record("frameSource.failed", fields: [
+                        "reason": reason,
+                        "connectionLoss": frameSourceFailureIsConnectionLoss() ? "true" : "false"
+                    ])
+                }
+            }
+        } catch {
+            guard isCurrentMonitoringGeneration(generation) else { return }
+            if reconnectOnFailure, isConnectionLoss(error) {
+                await handleRealCameraInterruption(reason: error.localizedDescription, generation: generation)
+            } else {
+                showUserMessage("帧源启动失败：\(error.localizedDescription)")
+                diagnosticsLog.record("frameSource.start.failed", fields: [
+                    "errorType": String(describing: type(of: error)),
+                    "error": error.localizedDescription
+                ])
+            }
+        }
+    }
+
+    private func connectCameraForCurrentMode(generation: Int) async {
+        guard isCurrentMonitoringGeneration(generation) else { return }
+        setConnection(cameraMode == .realCamera ? .searching : .connecting, reason: "connect.start")
+        diagnosticsLog.record("camera.connect.start", fields: [
+            "cameraMode": cameraMode.diagnosticName,
+            "generation": "\(generation)"
+        ])
 
         do {
             var camera = try await cameraService.connect()
-            if let mockExposureMode = defaults.string(forKey: DefaultsKey.mockExposureMode),
+            guard isCurrentMonitoringGeneration(generation) else { return }
+            if cameraMode == .mock,
+               let mockExposureMode = defaults.string(forKey: DefaultsKey.mockExposureMode),
                camera.exposureMode.options.contains(mockExposureMode) {
                 // Mock 持久化只用于模拟器体验；未来真实相机接入后应以相机实际读取值为准。
                 // 这里仍走 command service 写入，避免绕过曝光模式能力表和 transport 校验。
                 camera = try await cameraService.setValue(mockExposureMode, for: .exposureMode)
+                guard isCurrentMonitoringGeneration(generation) else { return }
             }
             state.camera = camera
-            state.connection = .connected
+            setConnection(.connected, reason: "connect.succeeded")
+            diagnosticsLog.record("camera.connect.succeeded", fields: [
+                "cameraMode": cameraMode.diagnosticName,
+                "exposureMode": camera.exposureMode.current
+            ])
         } catch {
-            state.connection = .failed(error.localizedDescription)
+            guard isCurrentMonitoringGeneration(generation) else { return }
+            let newState = connectionState(for: error)
+            setConnection(newState, reason: "connect.failed")
+            var fields = [
+                "cameraMode": cameraMode.diagnosticName,
+                "connectionState": newState.diagnosticName,
+                "errorType": String(describing: type(of: error)),
+                "error": error.localizedDescription
+            ]
+            if let discoveryError = error as? NikonCameraDiscoveryError {
+                fields["errorCase"] = discoveryError.diagnosticName
+            }
+            diagnosticsLog.record("camera.connect.failed", fields: fields)
+        }
+    }
+
+    private func handleRealCameraInterruption(reason: String, generation: Int) async {
+        guard cameraMode == .realCamera, isCurrentMonitoringGeneration(generation) else { return }
+        setConnection(.interrupted(reason), reason: "realCamera.interrupted")
+        diagnosticsLog.record("camera.real.interrupted", fields: [
+            "reason": reason,
+            "generation": "\(generation)"
+        ])
+        await frameSource.stop()
+        await cameraService.disconnect()
+
+        reconnectAttemptCount = 0
+        while reconnectAttemptCount < maximumReconnectAttempts {
+            reconnectAttemptCount += 1
+            setConnection(.reconnecting(attempt: reconnectAttemptCount), reason: "realCamera.reconnect")
+            do {
+                try await Task.sleep(nanoseconds: UInt64(reconnectAttemptCount) * 700_000_000)
+            } catch {
+                return
+            }
+            guard isCurrentMonitoringGeneration(generation) else { return }
+
+            await connectCameraForCurrentMode(generation: generation)
+            guard isCurrentMonitoringGeneration(generation) else { return }
+            guard state.connection.isConnected else { continue }
+
+            reconnectAttemptCount = 0
+            await startFrameSource(reconnectOnFailure: true, generation: generation)
+            return
+        }
+    }
+
+    private func setConnection(_ connection: ConnectionState, reason: String) {
+        let previous = state.connection
+        state.connection = connection
+        diagnosticsLog.record("camera.connection.changed", fields: [
+            "from": previous.diagnosticName,
+            "to": connection.diagnosticName,
+            "reason": reason
+        ])
+    }
+
+    private func isCurrentMonitoringGeneration(_ generation: Int) -> Bool {
+        generation == monitoringGeneration && !Task.isCancelled
+    }
+
+    private func frameSourceFailureIsConnectionLoss() -> Bool {
+        (frameSource as? FrameSourceConnectionLossReporting)?.didFailFromConnectionLoss ?? false
+    }
+
+    private func isConnectionLoss(_ error: Error) -> Bool {
+        if let discoveryError = error as? NikonCameraDiscoveryError {
+            switch discoveryError {
+            case .noCamera, .missingPTPCapability:
+                return true
+            case .authorizationDenied, .unsupportedCamera:
+                return false
+            }
+        }
+
+        if let runtimeError = error as? NikonCameraRuntimeError {
+            if case .notConnected = runtimeError {
+                return true
+            }
+        }
+
+        if let clientError = error as? PTPClientError {
+            switch clientError {
+            case .missingPTPCapability, .timeout, .timedOutOperationStillInFlight, .transactionMismatch:
+                return true
+            case .responseError:
+                return false
+            }
+        }
+
+        return false
+    }
+
+    private func connectionState(for error: Error) -> ConnectionState {
+        guard cameraMode == .realCamera else {
+            return .failed(error.localizedDescription)
+        }
+
+        if let discoveryError = error as? NikonCameraDiscoveryError {
+            switch discoveryError {
+            case .noCamera:
+                return .noCamera
+            case .authorizationDenied:
+                return .permissionDenied(realCameraMessage(for: discoveryError))
+            case .unsupportedCamera, .missingPTPCapability:
+                return .unsupported(realCameraMessage(for: discoveryError))
+            }
+        }
+
+        return .failed(error.localizedDescription)
+    }
+
+    private func realCameraMessage(for error: NikonCameraDiscoveryError) -> String {
+        switch error {
+        case .noCamera:
+            return "未发现可连接的 Nikon Z6III。请连接相机后重试。"
+        case .unsupportedCamera(let model):
+            return "已发现 \(model)，当前真实相机模式只支持 Nikon Z6III。"
+        case .authorizationDenied:
+            return "iOS 未授权相机控制。请在系统权限弹窗或设置中允许访问后重试。"
+        case .missingPTPCapability(let model):
+            return "\(model) 已被发现，但 iOS 未报告 PTP 命令能力。请确认相机 USB 模式和数据线连接；需要定位时先运行 GPhotoProbe 导出诊断。"
         }
     }
 
@@ -366,7 +681,8 @@ final class MonitorSession: ObservableObject {
             state.lut.selectedLUT = allLUTs.first { $0.id == uuid }
         }
 
-        if let mockExposureMode = defaults.string(forKey: DefaultsKey.mockExposureMode),
+        if cameraMode == .mock,
+           let mockExposureMode = defaults.string(forKey: DefaultsKey.mockExposureMode),
            state.camera.exposureMode.options.contains(mockExposureMode) {
             state.camera.exposureMode.current = mockExposureMode
         }

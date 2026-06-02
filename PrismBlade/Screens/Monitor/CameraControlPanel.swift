@@ -35,16 +35,27 @@ struct CameraControlPanel: View {
                 actionButton(
                     title: session.state.camera.isRecording ? "停止" : "REC",
                     systemImage: "record.circle",
-                    tint: session.state.camera.isRecording ? .red : .white
+                    tint: session.state.camera.isRecording ? .red : .white,
+                    availability: session.availability(for: .toggleRecord)
                 ) {
                     session.triggerCameraAction(.toggleRecord)
                 }
 
-                actionButton(title: "拍照", systemImage: "camera.circle", tint: .white) {
+                actionButton(
+                    title: "拍照",
+                    systemImage: "camera.circle",
+                    tint: .white,
+                    availability: session.availability(for: .capture)
+                ) {
                     session.triggerCameraAction(.capture)
                 }
 
-                actionButton(title: "AF", systemImage: "scope", tint: .white) {
+                actionButton(
+                    title: "AF",
+                    systemImage: "scope",
+                    tint: .white,
+                    availability: session.availability(for: .focus)
+                ) {
                     session.triggerCameraAction(.focus)
                 }
             }
@@ -121,6 +132,7 @@ struct CameraControlPanel: View {
 
                 if parameter == .focusMode {
                     // 对焦更像动作而非连续数值，因此在模式滑块旁额外提供 AF 触发按钮。
+                    let availability = session.availability(for: .focus)
                     Button {
                         session.triggerCameraAction(.focus)
                     } label: {
@@ -128,6 +140,7 @@ struct CameraControlPanel: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.white.opacity(0.22))
+                    .disabled(!availability.isEnabled)
                 }
 
                 Button {
@@ -170,7 +183,13 @@ struct CameraControlPanel: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    private func actionButton(title: String, systemImage: String, tint: Color, action: @escaping () -> Void) -> some View {
+    private func actionButton(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        availability: CameraActionAvailability,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             VStack(spacing: 2) {
                 Image(systemName: systemImage)
@@ -178,14 +197,13 @@ struct CameraControlPanel: View {
                 Text(title)
                     .font(.caption2.weight(.semibold))
             }
-            .foregroundStyle(tint)
+            .foregroundStyle(availability.isEnabled ? tint : .white.opacity(0.34))
             .frame(width: 52, height: 44)
             .background(.black.opacity(0.38))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
-        // 未连接时禁用动作按钮，避免向 Mock transport 发送一定会失败的动作命令。
-        .disabled(!session.state.connection.isConnected)
+        .disabled(!availability.isEnabled)
     }
 
     private func sliderBinding(for parameter: CameraParameter, value: CameraValue) -> Binding<Double> {
