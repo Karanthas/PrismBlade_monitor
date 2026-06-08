@@ -19,6 +19,49 @@ final class PTPFoundationTests: XCTestCase {
         ))
         XCTAssertEqual(write.operation, .setDevicePropValue)
         XCTAssertEqual(write.dataPhase, .outboundDataRequired)
+
+        let liveViewSizeWrite = try policy.validate(.selectNikonLiveViewSize(
+            propertyCode: NikonPTPDeviceProperty.liveViewSize,
+            encodedValue: Data([0x02, 0x00])
+        ))
+        XCTAssertEqual(liveViewSizeWrite.operation, .setDevicePropValue)
+        XCTAssertEqual(liveViewSizeWrite.parameters, [UInt32(NikonPTPDeviceProperty.liveViewSize)])
+        XCTAssertEqual(liveViewSizeWrite.diagnosticName, "ptp.setDevicePropValue.nikonLiveViewSize")
+    }
+
+    func testPolicyRejectsInvalidLiveViewSizeWritesBeforePacketConstruction() async throws {
+        let transport = RecordingPTPTransport(responseCode: .ok)
+        let client = PTPClient(transport: transport)
+
+        do {
+            _ = try await client.send(.selectNikonLiveViewSize(propertyCode: 0xD001, encodedValue: Data([0x02, 0x00])))
+            XCTFail("Mismatched liveviewsize property must fail before transport send.")
+        } catch PTPOperationPolicyError.mismatchedLiveViewSizeProperty(let expected, let actual) {
+            XCTAssertEqual(expected, NikonPTPDeviceProperty.liveViewSize)
+            XCTAssertEqual(actual, 0xD001)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        do {
+            _ = try await client.send(.selectNikonLiveViewSize(propertyCode: NikonPTPDeviceProperty.liveViewSize, encodedValue: Data()))
+            XCTFail("Empty liveviewsize payload must fail before transport send.")
+        } catch PTPOperationPolicyError.emptyLiveViewSizePayload {
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        do {
+            _ = try await client.send(.selectNikonLiveViewSize(propertyCode: NikonPTPDeviceProperty.liveViewSize, encodedValue: Data([0x04])))
+            XCTFail("Unapproved liveviewsize raw value must fail before transport send.")
+        } catch PTPOperationPolicyError.unsupportedLiveViewSizeRawValue(let rawValue) {
+            XCTAssertEqual(rawValue, 4)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        let sentPackets = await transport.sentPacketSnapshot()
+        XCTAssertEqual(sentPackets.count, 0)
     }
 
     func testPolicyRejectsMismatchedImmediateWritePropertyBeforePacketConstruction() async throws {

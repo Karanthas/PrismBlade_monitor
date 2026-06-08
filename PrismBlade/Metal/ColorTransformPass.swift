@@ -3,6 +3,8 @@ import simd
 enum ColorTransformPass {
     static func encodingCode(for encoding: SourceColorEncoding) -> Float {
         switch encoding {
+        case .unknown:
+            return 0
         case .rec709:
             return 0
         case .nLog:
@@ -14,6 +16,8 @@ enum ColorTransformPass {
 
     static func transform(_ color: SIMD3<Float>, encoding: SourceColorEncoding) -> SIMD3<Float> {
         switch encoding {
+        case .unknown:
+            return clamp(color)
         case .rec709:
             return clamp(color)
         case .nLog:

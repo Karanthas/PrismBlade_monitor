@@ -301,10 +301,14 @@ final class MonitorSession: ObservableObject {
         guard availability.isEnabled else {
             // UI 层提交前先拦一次，降低无效 async 命令和错误噪音。
             showUserMessage(availability.reason)
-            diagnosticsLog.record("camera.parameter.blocked", fields: [
+            let diagnostic = blockedParameterWriteDiagnostic(parameter: parameter, value: value, availability: availability)
+            let fields = [
                 "parameter": parameter.rawValue,
                 "reason": availability.reason ?? ""
-            ])
+            ].merging(diagnostic.evidenceFields) { _, new in
+                new
+            }
+            diagnosticsLog.record("camera.parameter.blocked", fields: fields)
             return
         }
 
@@ -327,6 +331,18 @@ final class MonitorSession: ObservableObject {
                     // 只持久化 Mock 模式，方便模拟器复现；真实相机接入时必须以相机读取值为准。
                     defaults.set(value, forKey: DefaultsKey.mockExposureMode)
                 }
+            } catch NikonCameraRuntimeError.parameterWriteFailed(let diagnostic) {
+                showUserMessage(diagnostic.userMessage)
+                let fields = [
+                    "parameter": parameter.rawValue,
+                    "value": value,
+                    "errorType": "NikonCameraRuntimeError.parameterWriteFailed",
+                    "error": diagnostic.userMessage
+                ].merging(diagnostic.evidenceFields) { _, new in
+                    new
+                }
+                diagnosticsLog.record("camera.parameter.failed", fields: fields)
+                markCameraParameter(parameter, isSubmitting: false)
             } catch {
                 showUserMessage("相机参数提交失败：\(error.localizedDescription)")
                 diagnosticsLog.record("camera.parameter.failed", fields: [
@@ -338,6 +354,30 @@ final class MonitorSession: ObservableObject {
                 markCameraParameter(parameter, isSubmitting: false)
             }
         }
+    }
+
+    private func blockedParameterWriteDiagnostic(
+        parameter: CameraParameter,
+        value: String,
+        availability: CameraParameterAvailability
+    ) -> CameraParameterWriteDiagnostic {
+        let blockReason: CameraParameterWriteBlockReason
+        if state.connection.isConnected, cameraValue(for: parameter).isWritable {
+            blockReason = .modeLock
+        } else {
+            blockReason = .readOnlyDescriptor
+        }
+
+        return CameraParameterWriteDiagnostic(
+            parameterName: parameter.rawValue,
+            propertyCode: NikonPTPDeviceProperty.standardImmediateControlCodes[parameter],
+            descriptor: nil,
+            attemptedValue: PropertyValueObservation(raw: value, display: value),
+            responseCode: nil,
+            readbackValue: nil,
+            blockReason: blockReason,
+            userMessage: availability.reason ?? "\(parameter.title) 当前不可写"
+        )
     }
 
     func triggerCameraAction(_ action: CameraAction) {

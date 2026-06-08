@@ -3,10 +3,20 @@ import Foundation
 final class AppDiagnosticsLog: @unchecked Sendable {
     private let lock = NSLock()
     private let maximumEntryCount: Int
+    private let mirrorFileURL: URL?
     private var entries: [[String: String]] = []
 
-    init(maximumEntryCount: Int = 500) {
+    init(maximumEntryCount: Int = 500, mirrorFileURL: URL? = nil) {
         self.maximumEntryCount = maximumEntryCount
+        self.mirrorFileURL = mirrorFileURL
+
+        if let mirrorFileURL {
+            try? FileManager.default.createDirectory(
+                at: mirrorFileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try? Data().write(to: mirrorFileURL, options: [.atomic])
+        }
     }
 
     func record(_ event: String, fields: [String: String] = [:]) {
@@ -20,6 +30,7 @@ final class AppDiagnosticsLog: @unchecked Sendable {
         if entries.count > maximumEntryCount {
             entries.removeFirst(entries.count - maximumEntryCount)
         }
+        appendMirrorLine(for: entry)
         lock.unlock()
     }
 
@@ -33,26 +44,48 @@ final class AppDiagnosticsLog: @unchecked Sendable {
         }
 
         return snapshot
-            .map { entry in
-                guard let data = try? JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys]),
-                      let line = String(data: data, encoding: .utf8) else {
-                    return "\(entry)"
-                }
-                return line
-            }
+            .map { Self.jsonLine(for: $0) }
             .joined(separator: "\n")
     }
 
     func clear() {
         lock.lock()
         entries.removeAll()
+        truncateMirrorFile()
         lock.unlock()
         record("diagnostics.cleared")
+    }
+
+    private func appendMirrorLine(for entry: [String: String]) {
+        guard let mirrorFileURL else { return }
+
+        guard let data = "\(Self.jsonLine(for: entry))\n".data(using: .utf8),
+              let fileHandle = try? FileHandle(forWritingTo: mirrorFileURL) else {
+            return
+        }
+
+        fileHandle.seekToEndOfFile()
+        fileHandle.write(data)
+        fileHandle.closeFile()
+    }
+
+    private func truncateMirrorFile() {
+        guard let mirrorFileURL else { return }
+        try? Data().write(to: mirrorFileURL, options: [.atomic])
+    }
+
+    private static func jsonLine(for entry: [String: String]) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys]),
+              let line = String(data: data, encoding: .utf8) else {
+            return "\(entry)"
+        }
+        return line
     }
 }
 
 enum AppEnvironment {
     static let realCameraPreferenceKey = "PrismBlade.useRealCameraMode"
+    static let diagnosticsMirrorArgument = "-PBDiagnosticsMirrorDocuments"
 
     static func isRealCameraPreferenceEnabled() -> Bool {
         UserDefaults.standard.bool(forKey: realCameraPreferenceKey)
@@ -70,13 +103,15 @@ enum AppEnvironment {
     @MainActor
     static func makeMonitorSession(arguments: [String]) -> MonitorSession {
         let lutRepository = LUTRepository()
-        let diagnosticsLog = AppDiagnosticsLog()
+        let diagnosticsMirrorURL = diagnosticsMirrorFileURL(arguments: arguments)
+        let diagnosticsLog = AppDiagnosticsLog(mirrorFileURL: diagnosticsMirrorURL)
         let preferenceUsesRealCamera = isRealCameraPreferenceEnabled()
         let launchArgumentUsesRealCamera = arguments.contains("-PBUseRealCamera")
         let launchArgumentUsesMockCamera = arguments.contains("-PBUseMockCamera")
         let usesRealCamera = launchArgumentUsesRealCamera || (!launchArgumentUsesMockCamera && preferenceUsesRealCamera)
         diagnosticsLog.record("app.environment.start", fields: [
             "hasLocalVideoPath": launchArgumentValue(for: "-PBLocalVideoPath", in: arguments) == nil ? "false" : "true",
+            "mirrorsDiagnosticsToDocuments": diagnosticsMirrorURL == nil ? "false" : "true",
             "usesMockCameraArgument": launchArgumentUsesMockCamera ? "true" : "false",
             "usesRealCamera": usesRealCamera ? "true" : "false",
             "usesRealCameraArgument": launchArgumentUsesRealCamera ? "true" : "false",
@@ -102,11 +137,16 @@ enum AppEnvironment {
             let discovery = NikonCameraDiscoveryService(bridge: bridge, diagnostics: diagnostics)
             let ptpTransport = ImageCaptureCoreSelectedCameraPTPTransport(discoveryBridge: bridge)
             let ptpClient = PTPClient(transport: ptpTransport, diagnostics: diagnostics)
-            let runtime = NikonCameraRuntime(discovery: discovery, ptp: ptpClient)
+            let runtime = NikonCameraRuntime(
+                discovery: discovery,
+                ptp: ptpClient,
+                liveViewSizeSelector: .nikonZ6IIILargestObservedLiveViewSize,
+                diagnosticsLog: diagnosticsLog
+            )
 
             // Real-camera mode is explicit while the iOS USB/PTP path is still hardware-validated.
             return MonitorSession(
-                frameSource: NikonLiveViewFrameSource(runtime: runtime),
+                frameSource: NikonLiveViewFrameSource(runtime: runtime, diagnosticsLog: diagnosticsLog),
                 cameraService: CameraCommandService(transport: NikonPTPCameraTransport(runtime: runtime)),
                 lutRepository: lutRepository,
                 cameraMode: .realCamera,
@@ -140,5 +180,15 @@ enum AppEnvironment {
         }
 
         return nil
+    }
+
+    private static func diagnosticsMirrorFileURL(arguments: [String]) -> URL? {
+        guard arguments.contains(diagnosticsMirrorArgument) else { return nil }
+
+        return FileManager.default
+            .urls(for: .documentDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("PrismBladeDiagnostics", isDirectory: false)
+            .appendingPathExtension("jsonl")
     }
 }

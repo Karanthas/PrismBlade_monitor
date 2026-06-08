@@ -226,10 +226,25 @@ struct PTPDeviceInfo: Equatable {
     }
 
     func probePropertyCodes(limit: Int = 12) -> [UInt16] {
+        guard limit > 0 else { return [] }
+
         let supported = Set(devicePropertiesSupported)
         let preferred = PTPDevicePropertyCatalog.preferredProbeOrder.filter(supported.contains)
         let remaining = devicePropertiesSupported.filter { !preferred.contains($0) }
-        return Array((preferred + remaining).prefix(limit))
+        var propertyCodes = Array((preferred + remaining).prefix(limit))
+        if isNikonPTPDevice, !propertyCodes.contains(PTPDevicePropertyCatalog.nikonLiveViewSize) {
+            if propertyCodes.count < limit {
+                propertyCodes.append(PTPDevicePropertyCatalog.nikonLiveViewSize)
+            } else {
+                propertyCodes[propertyCodes.count - 1] = PTPDevicePropertyCatalog.nikonLiveViewSize
+            }
+        }
+        return propertyCodes
+    }
+
+    private var isNikonPTPDevice: Bool {
+        manufacturer.localizedCaseInsensitiveContains("nikon") ||
+            model.localizedCaseInsensitiveContains("nikon")
     }
 }
 
@@ -278,6 +293,8 @@ enum PTPDeviceInfoParser {
 }
 
 enum PTPDevicePropertyCatalog {
+    static let nikonLiveViewSize: UInt16 = 0xD1AC
+
     static let preferredProbeOrder: [UInt16] = [
         0x5001, // BatteryLevel
         0x5005, // WhiteBalance
@@ -325,6 +342,8 @@ enum PTPDevicePropertyCatalog {
         case 0x501D: return "UploadURL"
         case 0x501E: return "Artist"
         case 0x501F: return "CopyrightInfo"
+        case 0xD1AC: return "NikonLiveViewImageSize"
+        case 0xD1B0: return "NikonExposureDisplayStatus"
         default:
             if code >= 0xD000 {
                 return "VendorProperty"

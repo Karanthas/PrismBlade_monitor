@@ -302,6 +302,7 @@ enum NikonCameraRuntimeError: Error, Equatable, LocalizedError {
     case readOnlyParameter(CameraParameter)
     case unsupportedAction(CameraAction)
     case readbackMismatch(parameter: CameraParameter, expected: String, actual: String)
+    case parameterWriteFailed(CameraParameterWriteDiagnostic)
 
     var errorDescription: String? {
         switch self {
@@ -317,20 +318,32 @@ enum NikonCameraRuntimeError: Error, Equatable, LocalizedError {
             return "Camera action \(action) is disabled for the real Nikon runtime."
         case .readbackMismatch(let parameter, let expected, let actual):
             return "\(parameter.title) readback mismatch after write: expected \(expected), got \(actual)."
+        case .parameterWriteFailed(let diagnostic):
+            return diagnostic.userMessage
         }
     }
 }
 
 protocol NikonLiveViewRuntime {
+    func liveViewSessionEvidence() async throws -> NikonLiveViewSessionEvidence
     func startLiveViewSession() async throws
     func fetchLiveViewPayload() async throws -> Data
     func endLiveViewSession() async throws -> Bool
+}
+
+extension NikonLiveViewRuntime {
+    func liveViewSessionEvidence() async throws -> NikonLiveViewSessionEvidence {
+        NikonLiveViewSessionEvidence.inconclusive
+    }
 }
 
 actor NikonCameraRuntime {
     private let discovery: NikonCameraDiscoveryService
     private let ptp: NikonRuntimePTPSending
     private let mapper: NikonZ6IIIPropertyMapper
+    private let colorClassifier: NikonColorEncodingClassifier
+    private let liveViewSizeSelector: NikonLiveViewSizeSelector
+    private let diagnosticsLog: AppDiagnosticsLog?
     private var selectedCamera: NikonCameraDescriptor?
     private var isConnected = false
     private var isLiveViewActive = false
@@ -339,11 +352,17 @@ actor NikonCameraRuntime {
     init(
         discovery: NikonCameraDiscoveryService,
         ptp: NikonRuntimePTPSending,
-        mapper: NikonZ6IIIPropertyMapper = NikonZ6IIIPropertyMapper()
+        mapper: NikonZ6IIIPropertyMapper = NikonZ6IIIPropertyMapper(),
+        colorClassifier: NikonColorEncodingClassifier = NikonColorEncodingClassifier(),
+        liveViewSizeSelector: NikonLiveViewSizeSelector = NikonLiveViewSizeSelector(),
+        diagnosticsLog: AppDiagnosticsLog? = nil
     ) {
         self.discovery = discovery
         self.ptp = ptp
         self.mapper = mapper
+        self.colorClassifier = colorClassifier
+        self.liveViewSizeSelector = liveViewSizeSelector
+        self.diagnosticsLog = diagnosticsLog
     }
 
     func connect() async throws -> CameraState {
@@ -394,28 +413,120 @@ actor NikonCameraRuntime {
     func setValue(_ value: String, for parameter: CameraParameter) async throws -> CameraState {
         let generation = try activeConnectionGeneration()
         guard let mapping = mapper.mapping(for: parameter) else {
-            throw NikonCameraRuntimeError.unsupportedParameter(parameter)
+            let diagnostic = writeDiagnostic(
+                parameter: parameter,
+                value: value,
+                mapping: nil,
+                descriptor: nil,
+                responseCode: nil,
+                readbackValue: nil,
+                blockReason: .unsupportedMapping
+            )
+            recordWriteDiagnostic(diagnostic, event: "camera.parameter.write.failed")
+            throw NikonCameraRuntimeError.parameterWriteFailed(diagnostic)
         }
 
-        let descriptor = try await readDescriptor(mapping: mapping, generation: generation)
-        let write = try mapper.encodedWrite(parameter: parameter, value: value, descriptor: descriptor)
+        let descriptor: NikonPropertyDescriptor
+        do {
+            descriptor = try await readDescriptor(mapping: mapping, generation: generation)
+        } catch let error as PTPClientError {
+            let diagnostic = writeDiagnostic(
+                parameter: parameter,
+                value: value,
+                mapping: mapping,
+                descriptor: nil,
+                responseCode: responseCode(from: error),
+                readbackValue: nil,
+                blockReason: .ptpResponseError
+            )
+            recordWriteDiagnostic(diagnostic, event: "camera.parameter.write.failed")
+            throw NikonCameraRuntimeError.parameterWriteFailed(diagnostic)
+        }
+
+        let write: (propertyCode: UInt16, encodedValue: Data)
+        do {
+            write = try mapper.encodedWrite(parameter: parameter, value: value, descriptor: descriptor)
+        } catch {
+            let diagnostic = writeDiagnostic(
+                parameter: parameter,
+                value: value,
+                mapping: mapping,
+                descriptor: descriptor,
+                responseCode: nil,
+                readbackValue: nil,
+                blockReason: writeBlockReason(parameter: parameter, value: value, mapping: mapping, descriptor: descriptor)
+            )
+            recordWriteDiagnostic(diagnostic, event: "camera.parameter.write.failed")
+            throw NikonCameraRuntimeError.parameterWriteFailed(diagnostic)
+        }
+
         try assertConnected(generation)
-        _ = try await ptp.send(.writeImmediateControl(
-            parameter: parameter,
-            propertyCode: write.propertyCode,
-            encodedValue: write.encodedValue
-        ))
+        do {
+            _ = try await ptp.send(.writeImmediateControl(
+                parameter: parameter,
+                propertyCode: write.propertyCode,
+                encodedValue: write.encodedValue
+            ))
+        } catch let error as PTPClientError {
+            let diagnostic = writeDiagnostic(
+                parameter: parameter,
+                value: value,
+                mapping: mapping,
+                descriptor: descriptor,
+                responseCode: responseCode(from: error),
+                readbackValue: nil,
+                blockReason: .ptpResponseError
+            )
+            recordWriteDiagnostic(diagnostic, event: "camera.parameter.write.failed")
+            throw NikonCameraRuntimeError.parameterWriteFailed(diagnostic)
+        }
         try assertConnected(generation)
         let updatedState = try await currentState(generation: generation)
         let readbackValue = cameraValue(for: parameter, in: updatedState).current
         guard readbackValue == value else {
-            throw NikonCameraRuntimeError.readbackMismatch(parameter: parameter, expected: value, actual: readbackValue)
+            let diagnostic = writeDiagnostic(
+                parameter: parameter,
+                value: value,
+                mapping: mapping,
+                descriptor: descriptor,
+                responseCode: PTPResponseCode.ok.rawValue,
+                readbackValue: readbackValue,
+                blockReason: .readbackMismatch
+            )
+            recordWriteDiagnostic(diagnostic, event: "camera.parameter.write.failed")
+            throw NikonCameraRuntimeError.parameterWriteFailed(diagnostic)
         }
+        let diagnostic = writeDiagnostic(
+            parameter: parameter,
+            value: value,
+            mapping: mapping,
+            descriptor: descriptor,
+            responseCode: PTPResponseCode.ok.rawValue,
+            readbackValue: readbackValue,
+            blockReason: .applied
+        )
+        recordWriteDiagnostic(diagnostic, event: "camera.parameter.write.succeeded")
         return updatedState
     }
 
     func trigger(_ action: CameraAction) async throws -> CameraState {
         throw NikonCameraRuntimeError.unsupportedAction(action)
+    }
+
+    func liveViewSessionEvidence() async throws -> NikonLiveViewSessionEvidence {
+        let generation = try activeConnectionGeneration()
+        let observations = try await readColorEncodingObservations(generation: generation)
+        let colorEvidence = colorClassifier.classify(observations)
+        let liveViewSizeEvidence = try await readLiveViewSizeEvidence(generation: generation)
+        let evidence = NikonLiveViewSessionEvidence(
+            colorEncoding: colorEvidence.sourceColorEncoding,
+            colorEvidence: colorEvidence,
+            liveViewSizeEvidence: liveViewSizeEvidence,
+            selectedLiveViewSize: liveViewSizeEvidence.selectedValue,
+            decodedFrameSize: nil
+        )
+        diagnosticsLog?.record("camera.liveView.evidence", fields: evidence.evidenceFields)
+        return evidence
     }
 
     func startLiveViewSession() async throws {
@@ -449,6 +560,323 @@ actor NikonCameraRuntime {
     private func currentState(generation: Int) async throws -> CameraState {
         let descriptors = try await readDescriptors(generation: generation)
         return mapper.state(from: descriptors)
+    }
+
+    private func readColorEncodingObservations(generation: Int) async throws -> [PropertyObservation] {
+        var observations: [PropertyObservation] = []
+        for candidate in NikonPTPDeviceProperty.nLogCandidateCodes {
+            do {
+                if let observation = try await readPropertyObservation(candidate: candidate, generation: generation) {
+                    observations.append(observation)
+                }
+            } catch PTPClientError.responseError(let code, let rawCode) {
+                observations.append(PropertyObservation(
+                    code: candidate.code,
+                    name: candidate.name,
+                    access: "unknown",
+                    currentValue: nil,
+                    permittedValues: [],
+                    permittedRange: nil,
+                    reason: "Candidate property read returned \(code) (\(PTPDiagnostics.hex(rawCode)))."
+                ))
+            } catch NikonCameraRuntimeError.notConnected {
+                throw NikonCameraRuntimeError.notConnected
+            } catch {
+                observations.append(PropertyObservation(
+                    code: candidate.code,
+                    name: candidate.name,
+                    access: "unknown",
+                    currentValue: nil,
+                    permittedValues: [],
+                    permittedRange: nil,
+                    reason: "Candidate property read failed: \(error.localizedDescription)"
+                ))
+            }
+        }
+        return observations
+    }
+
+    private func readLiveViewSizeEvidence(generation: Int) async throws -> NikonLiveViewSizeEvidence {
+        let candidate = NamedPTPPropertyCode(
+            code: NikonPTPDeviceProperty.liveViewSize,
+            name: NikonPTPDeviceProperty.name(for: NikonPTPDeviceProperty.liveViewSize)
+        )
+        let descriptor: NikonPropertyDescriptor
+        do {
+            guard let parsedDescriptor = try await readPropertyDescriptor(candidate: candidate, generation: generation) else {
+                return NikonLiveViewSizeEvidence(
+                    observation: nil,
+                    selectedValue: nil,
+                    decodedFrameSize: nil,
+                    sourceIs1920x1080: false,
+                    reason: "Nikon liveviewsize descriptor could not be parsed."
+                )
+            }
+            descriptor = parsedDescriptor
+        } catch PTPClientError.responseError(let code, let rawCode) {
+            return NikonLiveViewSizeEvidence(
+                observation: nil,
+                selectedValue: nil,
+                decodedFrameSize: nil,
+                sourceIs1920x1080: false,
+                reason: "Nikon liveviewsize descriptor/value read returned \(code) (\(PTPDiagnostics.hex(rawCode)))."
+            )
+        } catch NikonCameraRuntimeError.notConnected {
+            throw NikonCameraRuntimeError.notConnected
+        }
+
+        let beforeSelection = propertyObservation(candidate: candidate, descriptor: descriptor)
+        switch liveViewSizeSelector.validatedTarget(for: descriptor) {
+        case .notSelected(let reason):
+            return NikonLiveViewSizeEvidence(
+                observation: beforeSelection,
+                selectedValue: nil,
+                decodedFrameSize: nil,
+                sourceIs1920x1080: false,
+                reason: reason
+            )
+        case .select(let rawValue, let value):
+            let encodedValue = NikonPropertyDescriptorParser.encodeValue(rawValue, dataType: descriptor.dataType)
+            do {
+                _ = try await ptp.send(.selectNikonLiveViewSize(
+                    propertyCode: NikonPTPDeviceProperty.liveViewSize,
+                    encodedValue: encodedValue
+                ))
+                try assertConnected(generation)
+            } catch PTPClientError.responseError(let code, let rawCode) {
+                return NikonLiveViewSizeEvidence(
+                    observation: beforeSelection,
+                    selectedValue: nil,
+                    decodedFrameSize: nil,
+                    sourceIs1920x1080: false,
+                    reason: "Nikon liveviewsize write of \(value.display) raw \(rawValue) returned \(code) (\(PTPDiagnostics.hex(rawCode)))."
+                )
+            } catch NikonCameraRuntimeError.notConnected {
+                throw NikonCameraRuntimeError.notConnected
+            }
+
+            let readbackResult: PTPClientResult
+            do {
+                readbackResult = try await ptp.send(.readPropertyValue(NikonPTPDeviceProperty.liveViewSize))
+                try assertConnected(generation)
+            } catch PTPClientError.responseError(let code, let rawCode) {
+                return NikonLiveViewSizeEvidence(
+                    observation: beforeSelection,
+                    selectedValue: nil,
+                    decodedFrameSize: nil,
+                    sourceIs1920x1080: false,
+                    reason: "Nikon liveviewsize readback after writing \(value.display) raw \(rawValue) returned \(code) (\(PTPDiagnostics.hex(rawCode)))."
+                )
+            } catch NikonCameraRuntimeError.notConnected {
+                throw NikonCameraRuntimeError.notConnected
+            }
+
+            let readbackRawValue = try NikonPropertyDescriptorParser.decodeValue(
+                readbackResult.payloadData,
+                dataType: descriptor.dataType
+            )
+            guard readbackRawValue == rawValue else {
+                return NikonLiveViewSizeEvidence(
+                    observation: beforeSelection,
+                    selectedValue: nil,
+                    decodedFrameSize: nil,
+                    sourceIs1920x1080: false,
+                    reason: "Nikon liveviewsize readback \(readbackRawValue) did not match selected value \(rawValue)."
+                )
+            }
+            var readbackDescriptor = descriptor
+            readbackDescriptor.currentValue = readbackRawValue
+            return NikonLiveViewSizeEvidence(
+                observation: propertyObservation(candidate: candidate, descriptor: readbackDescriptor),
+                selectedValue: value,
+                decodedFrameSize: nil,
+                sourceIs1920x1080: false,
+                reason: "Nikon liveviewsize \(value.display) selected and read back; decoded frame dimensions determine whether the source is 1920x1080."
+            )
+        }
+    }
+
+    private func readPropertyObservation(candidate: NamedPTPPropertyCode, generation: Int) async throws -> PropertyObservation? {
+        guard let descriptor = try await readPropertyDescriptor(candidate: candidate, generation: generation) else {
+            return PropertyObservation(
+                code: candidate.code,
+                name: candidate.name,
+                access: "unknown",
+                currentValue: nil,
+                permittedValues: [],
+                permittedRange: nil,
+                reason: "Candidate property descriptor could not be parsed."
+            )
+        }
+        return propertyObservation(candidate: candidate, descriptor: descriptor)
+    }
+
+    private func readPropertyDescriptor(candidate: NamedPTPPropertyCode, generation: Int) async throws -> NikonPropertyDescriptor? {
+        try assertConnected(generation)
+        let descriptorResult = try await ptp.send(.readPropertyDescription(candidate.code))
+        try assertConnected(generation)
+        guard var descriptor = try? NikonPropertyDescriptorParser.parse(
+            descriptorResult.payloadData,
+            expectedPropertyCode: candidate.code
+        ) else {
+            return nil
+        }
+
+        let valueResult = try await ptp.send(.readPropertyValue(candidate.code))
+        try assertConnected(generation)
+        if let rawValue = try? NikonPropertyDescriptorParser.decodeValue(valueResult.payloadData, dataType: descriptor.dataType) {
+            descriptor.currentValue = rawValue
+        }
+        return descriptor
+    }
+
+    private func propertyObservation(candidate: NamedPTPPropertyCode, descriptor: NikonPropertyDescriptor) -> PropertyObservation {
+        PropertyObservation(
+            code: descriptor.propertyCode,
+            name: candidate.name,
+            access: descriptor.isWritable ? "readWrite" : "readOnly",
+            currentValue: PropertyValueObservation(
+                raw: "\(descriptor.currentValue)",
+                display: "\(descriptor.currentValue)"
+            ),
+            permittedValues: descriptor.permittedValues.map {
+                PropertyValueObservation(raw: "\($0)", display: "\($0)")
+            },
+            permittedRange: propertyRangeObservation(from: descriptor),
+            reason: "Read during live-view session evidence startup."
+        )
+    }
+
+    private func propertyRangeObservation(from descriptor: NikonPropertyDescriptor) -> PropertyValueRangeObservation? {
+        guard let range = descriptor.permittedRange else { return nil }
+        let step = descriptor.permittedStep ?? 0
+        return PropertyValueRangeObservation(
+            minimum: PropertyValueObservation(raw: "\(range.lowerBound)", display: "\(range.lowerBound)"),
+            maximum: PropertyValueObservation(raw: "\(range.upperBound)", display: "\(range.upperBound)"),
+            step: PropertyValueObservation(raw: "\(step)", display: "\(step)")
+        )
+    }
+
+    private func writeDiagnostic(
+        parameter: CameraParameter,
+        value: String,
+        mapping: NikonCameraPropertyMapping?,
+        descriptor: NikonPropertyDescriptor?,
+        responseCode: UInt16?,
+        readbackValue: String?,
+        blockReason: CameraParameterWriteBlockReason
+    ) -> CameraParameterWriteDiagnostic {
+        let rawAttempt = mapping?.rawValue(for: value)
+        return CameraParameterWriteDiagnostic(
+            parameterName: parameter.rawValue,
+            propertyCode: mapping?.propertyCode,
+            descriptor: writeDescriptorObservation(mapping: mapping, descriptor: descriptor),
+            attemptedValue: PropertyValueObservation(raw: rawAttempt.map(String.init) ?? value, display: value),
+            responseCode: responseCode,
+            readbackValue: readbackValue.map { readbackDisplay in
+                PropertyValueObservation(raw: rawReadbackValue(for: readbackDisplay, mapping: mapping), display: readbackDisplay)
+            },
+            blockReason: blockReason,
+            userMessage: userMessage(parameter: parameter, value: value, blockReason: blockReason)
+        )
+    }
+
+    private func writeDescriptorObservation(
+        mapping: NikonCameraPropertyMapping?,
+        descriptor: NikonPropertyDescriptor?
+    ) -> PropertyObservation? {
+        guard let mapping, let descriptor else { return nil }
+        return PropertyObservation(
+            code: descriptor.propertyCode,
+            name: NikonPTPDeviceProperty.name(for: descriptor.propertyCode),
+            access: descriptor.isWritable ? "readWrite" : "readOnly",
+            currentValue: PropertyValueObservation(
+                raw: "\(descriptor.currentValue)",
+                display: mapping.displayValue(for: descriptor.currentValue)
+            ),
+            permittedValues: descriptor.permittedValues.map {
+                PropertyValueObservation(raw: "\($0)", display: mapping.displayValue(for: $0))
+            },
+            permittedRange: writeRangeObservation(from: descriptor, mapping: mapping),
+            reason: "Descriptor read before parameter write."
+        )
+    }
+
+    private func writeRangeObservation(
+        from descriptor: NikonPropertyDescriptor,
+        mapping: NikonCameraPropertyMapping
+    ) -> PropertyValueRangeObservation? {
+        guard let range = descriptor.permittedRange else { return nil }
+        let step = descriptor.permittedStep ?? 0
+        return PropertyValueRangeObservation(
+            minimum: PropertyValueObservation(raw: "\(range.lowerBound)", display: mapping.displayValue(for: range.lowerBound)),
+            maximum: PropertyValueObservation(raw: "\(range.upperBound)", display: mapping.displayValue(for: range.upperBound)),
+            step: PropertyValueObservation(raw: "\(step)", display: "\(step)")
+        )
+    }
+
+    private func writeBlockReason(
+        parameter: CameraParameter,
+        value: String,
+        mapping: NikonCameraPropertyMapping,
+        descriptor: NikonPropertyDescriptor
+    ) -> CameraParameterWriteBlockReason {
+        guard mapper.mapping(for: parameter) != nil, mapping.isWriteApproved else {
+            return .unsupportedMapping
+        }
+        guard descriptor.isWritable else {
+            return .readOnlyDescriptor
+        }
+        guard let rawValue = mapping.rawValue(for: value) else {
+            return .unsupportedDisplayValue
+        }
+        guard descriptor.permits(rawValue) else {
+            return descriptor.permittedRange == nil ? .unsupportedRawValue : .descriptorRangeRejected
+        }
+        return .ptpResponseError
+    }
+
+    private func rawReadbackValue(for displayValue: String, mapping: NikonCameraPropertyMapping?) -> String {
+        guard let mapping, let rawValue = mapping.rawValue(for: displayValue) else {
+            return displayValue
+        }
+        return "\(rawValue)"
+    }
+
+    private func userMessage(
+        parameter: CameraParameter,
+        value: String,
+        blockReason: CameraParameterWriteBlockReason
+    ) -> String {
+        switch blockReason {
+        case .applied:
+            return "\(parameter.title) 已写入 \(value)"
+        case .unsupportedMapping:
+            return "\(parameter.title) 当前没有可验证的相机写入映射。"
+        case .readOnlyDescriptor:
+            return "\(parameter.title) 当前由相机报告为不可写。"
+        case .unsupportedDisplayValue:
+            return "\(parameter.title) 不支持 \(value)。"
+        case .unsupportedRawValue:
+            return "\(parameter.title) 的相机能力表不包含 \(value)。"
+        case .descriptorRangeRejected:
+            return "\(parameter.title) 超出相机报告的可写范围。"
+        case .ptpResponseError:
+            return "\(parameter.title) 写入被相机拒绝。"
+        case .modeLock:
+            return "\(parameter.title) 当前被曝光模式锁定。"
+        case .readbackMismatch:
+            return "\(parameter.title) 写入后读回值不一致。"
+        }
+    }
+
+    private func responseCode(from error: PTPClientError) -> UInt16? {
+        guard case .responseError(_, let rawCode) = error else { return nil }
+        return rawCode
+    }
+
+    private func recordWriteDiagnostic(_ diagnostic: CameraParameterWriteDiagnostic, event: String) {
+        diagnosticsLog?.record(event, fields: diagnostic.evidenceFields)
     }
 
     private func readDescriptors(generation: Int) async throws -> [CameraParameter: NikonPropertyDescriptor] {

@@ -41,6 +41,73 @@ final class NikonLiveViewFrameSourceTests: XCTestCase {
         XCTAssertGreaterThan(frame.sequence, 1)
     }
 
+    func testFrameSourceUsesRuntimeSuppliedColorEncoding() async throws {
+        let runtime = ScriptedLiveViewRuntime(
+            payloads: [try Self.liveViewPayload()],
+            evidence: .knownColorEncoding(.nLog)
+        )
+        let source = NikonLiveViewFrameSource(runtime: runtime)
+        let stream = source.frames()
+        var iterator = stream.makeAsyncIterator()
+
+        try await source.start()
+        guard let frame = await iterator.next() else {
+            return XCTFail("Expected one decoded frame.")
+        }
+        await source.stop()
+
+        XCTAssertEqual(frame.format.colorEncoding, .nLog)
+    }
+
+    func testFrameSourceRecordsFirstDecodedLiveViewSizeEvidence() async throws {
+        let selected = PropertyValueObservation(raw: "2", display: "1920x1080")
+        var evidence = NikonLiveViewSessionEvidence.knownColorEncoding(.rec709)
+        evidence.selectedLiveViewSize = selected
+        evidence.liveViewSizeEvidence.selectedValue = selected
+        let diagnosticsLog = AppDiagnosticsLog()
+        let runtime = ScriptedLiveViewRuntime(
+            payloads: [try Self.liveViewPayload(width: 4, height: 3)],
+            evidence: evidence
+        )
+        let source = NikonLiveViewFrameSource(runtime: runtime, diagnosticsLog: diagnosticsLog)
+        let stream = source.frames()
+        var iterator = stream.makeAsyncIterator()
+
+        try await source.start()
+        _ = await iterator.next()
+        await source.stop()
+
+        let logText = diagnosticsLog.exportText()
+        XCTAssertTrue(logText.contains(#""event":"camera.liveView.decodedFrame""#))
+        XCTAssertTrue(logText.contains(#""decodedWidth":"4""#))
+        XCTAssertTrue(logText.contains(#""decodedHeight":"3""#))
+        XCTAssertTrue(logText.contains(#""liveViewSizeSourceIs1920x1080":"false""#))
+    }
+
+    func testFrameSourceClassifies1080pFromDecodedFrameSize() async throws {
+        let selected = PropertyValueObservation(raw: "3", display: "1024x576")
+        var evidence = NikonLiveViewSessionEvidence.knownColorEncoding(.rec709)
+        evidence.selectedLiveViewSize = selected
+        evidence.liveViewSizeEvidence.selectedValue = selected
+        let diagnosticsLog = AppDiagnosticsLog()
+        let runtime = ScriptedLiveViewRuntime(
+            payloads: [try Self.liveViewPayload(width: 1920, height: 1080)],
+            evidence: evidence
+        )
+        let source = NikonLiveViewFrameSource(runtime: runtime, diagnosticsLog: diagnosticsLog)
+        let stream = source.frames()
+        var iterator = stream.makeAsyncIterator()
+
+        try await source.start()
+        _ = await iterator.next()
+        await source.stop()
+
+        let logText = diagnosticsLog.exportText()
+        XCTAssertTrue(logText.contains(#""decodedWidth":"1920""#))
+        XCTAssertTrue(logText.contains(#""decodedHeight":"1080""#))
+        XCTAssertTrue(logText.contains(#""liveViewSizeSourceIs1920x1080":"true""#))
+    }
+
     func testStopBeforeStartSendsNoCleanup() async {
         let runtime = ScriptedLiveViewRuntime(payloads: [])
         let source = NikonLiveViewFrameSource(runtime: runtime)
@@ -106,11 +173,17 @@ private actor ScriptedLiveViewRuntime: NikonLiveViewRuntime {
     }
 
     private var payloads: [Data]
+    private let evidence: NikonLiveViewSessionEvidence
     private var recordedOperations: [Operation] = []
     private var isStarted = false
 
-    init(payloads: [Data]) {
+    init(payloads: [Data], evidence: NikonLiveViewSessionEvidence = .knownColorEncoding(.rec709)) {
         self.payloads = payloads
+        self.evidence = evidence
+    }
+
+    func liveViewSessionEvidence() async throws -> NikonLiveViewSessionEvidence {
+        evidence
     }
 
     func startLiveViewSession() async throws {
@@ -135,5 +208,33 @@ private actor ScriptedLiveViewRuntime: NikonLiveViewRuntime {
 
     func operations() -> [Operation] {
         recordedOperations
+    }
+}
+
+private extension NikonLiveViewSessionEvidence {
+    static func knownColorEncoding(_ encoding: SourceColorEncoding) -> NikonLiveViewSessionEvidence {
+        let observation = PropertyObservation(
+            code: 0xD1A2,
+            name: "NikonVideoToneMode",
+            access: "readOnly",
+            currentValue: PropertyValueObservation(raw: "1", display: encoding.rawValue),
+            permittedValues: [],
+            permittedRange: nil,
+            reason: "Test runtime color evidence."
+        )
+        let colorEvidence: NikonColorEncodingEvidence = encoding == .nLog ? .nLog(observation) : .rec709(observation)
+        return NikonLiveViewSessionEvidence(
+            colorEncoding: encoding,
+            colorEvidence: colorEvidence,
+            liveViewSizeEvidence: .init(
+                observation: nil,
+                selectedValue: nil,
+                decodedFrameSize: nil,
+                sourceIs1920x1080: false,
+                reason: "No live-view size evidence in frame-source color tests."
+            ),
+            selectedLiveViewSize: nil,
+            decodedFrameSize: nil
+        )
     }
 }

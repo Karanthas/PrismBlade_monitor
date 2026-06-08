@@ -65,6 +65,8 @@
 		AA0000000000000000000156 /* JPEGPixelBufferDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000259 /* JPEGPixelBufferDecoderTests.swift */; };
 		AA0000000000000000000157 /* NikonLiveViewFrameSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000260 /* NikonLiveViewFrameSourceTests.swift */; };
 		AA0000000000000000000158 /* MonitorSessionRealCameraTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000261 /* MonitorSessionRealCameraTests.swift */; };
+		AA0000000000000000000159 /* NikonCameraEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000262 /* NikonCameraEvidence.swift */; };
+		AA0000000000000000000160 /* NikonCameraEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000263 /* NikonCameraEvidenceTests.swift */; };
 		BB0000000000000000000101 /* GPhotoProbeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000201 /* GPhotoProbeApp.swift */; };
 		BB0000000000000000000102 /* GPhotoProbeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000202 /* GPhotoProbeScreen.swift */; };
 		BB0000000000000000000103 /* GPhotoProbeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000203 /* GPhotoProbeViewModel.swift */; };
@@ -160,6 +162,8 @@
 		AA0000000000000000000259 /* JPEGPixelBufferDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JPEGPixelBufferDecoderTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000260 /* NikonLiveViewFrameSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NikonLiveViewFrameSourceTests.swift; sourceTree = "<group>"; };
 		AA0000000000000000000261 /* MonitorSessionRealCameraTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorSessionRealCameraTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000262 /* NikonCameraEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NikonCameraEvidence.swift; sourceTree = "<group>"; };
+		AA0000000000000000000263 /* NikonCameraEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NikonCameraEvidenceTests.swift; sourceTree = "<group>"; };
 		BB0000000000000000000201 /* GPhotoProbeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPhotoProbeApp.swift; sourceTree = "<group>"; };
 		BB0000000000000000000202 /* GPhotoProbeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPhotoProbeScreen.swift; sourceTree = "<group>"; };
 		BB0000000000000000000203 /* GPhotoProbeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPhotoProbeViewModel.swift; sourceTree = "<group>"; };
@@ -282,6 +286,7 @@
 			children = (
 				AA0000000000000000000250 /* PTPFoundation.swift */,
 				AA0000000000000000000251 /* NikonCameraDiscovery.swift */,
+				AA0000000000000000000262 /* NikonCameraEvidence.swift */,
 				AA0000000000000000000253 /* NikonCameraRuntime.swift */,
 			);
 			path = PTP;
@@ -371,6 +376,7 @@
 				AA0000000000000000000259 /* JPEGPixelBufferDecoderTests.swift */,
 				AA0000000000000000000260 /* NikonLiveViewFrameSourceTests.swift */,
 				AA0000000000000000000261 /* MonitorSessionRealCameraTests.swift */,
+				AA0000000000000000000263 /* NikonCameraEvidenceTests.swift */,
 				BB0000000000000000000418 /* GPhotoProbe */,
 			);
 			path = PrismBladeTests;
@@ -655,6 +661,7 @@
 				AA0000000000000000000145 /* MetalFrameProcessor.swift in Sources */,
 				AA0000000000000000000147 /* PTPFoundation.swift in Sources */,
 				AA0000000000000000000148 /* NikonCameraDiscovery.swift in Sources */,
+				AA0000000000000000000159 /* NikonCameraEvidence.swift in Sources */,
 				AA0000000000000000000150 /* NikonCameraRuntime.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -684,6 +691,7 @@
 				AA0000000000000000000156 /* JPEGPixelBufferDecoderTests.swift in Sources */,
 				AA0000000000000000000157 /* NikonLiveViewFrameSourceTests.swift in Sources */,
 				AA0000000000000000000158 /* MonitorSessionRealCameraTests.swift in Sources */,
+				AA0000000000000000000160 /* NikonCameraEvidenceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

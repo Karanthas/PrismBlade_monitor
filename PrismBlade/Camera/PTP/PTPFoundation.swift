@@ -41,6 +41,7 @@ enum PTPCommandIntent: Equatable {
     case readPropertyDescription(UInt16)
     case readPropertyValue(UInt16)
     case writeImmediateControl(parameter: CameraParameter, propertyCode: UInt16, encodedValue: Data)
+    case selectNikonLiveViewSize(propertyCode: UInt16, encodedValue: Data)
     case forbidden(PTPForbiddenOperation)
     case raw(operationCode: UInt16, parameters: [UInt32], outboundData: Data?)
 }
@@ -59,6 +60,9 @@ enum PTPOperationPolicyError: Error, Equatable, LocalizedError {
     case unsupportedImmediateControl(CameraParameter)
     case mismatchedWriteProperty(parameter: CameraParameter, expected: UInt16, actual: UInt16)
     case emptyWritePayload(CameraParameter)
+    case mismatchedLiveViewSizeProperty(expected: UInt16, actual: UInt16)
+    case emptyLiveViewSizePayload
+    case unsupportedLiveViewSizeRawValue(UInt32)
 
     var errorDescription: String? {
         switch self {
@@ -72,6 +76,12 @@ enum PTPOperationPolicyError: Error, Equatable, LocalizedError {
             return "\(parameter.title) write targeted \(PTPDiagnostics.hex(actual)); expected \(PTPDiagnostics.hex(expected))."
         case .emptyWritePayload(let parameter):
             return "\(parameter.title) write has no encoded PTP payload."
+        case .mismatchedLiveViewSizeProperty(let expected, let actual):
+            return "Nikon liveviewsize write targeted \(PTPDiagnostics.hex(actual)); expected \(PTPDiagnostics.hex(expected))."
+        case .emptyLiveViewSizePayload:
+            return "Nikon liveviewsize write has no encoded PTP payload."
+        case .unsupportedLiveViewSizeRawValue(let rawValue):
+            return "Nikon liveviewsize raw value \(rawValue) is not in the approved observed set."
         }
     }
 }
@@ -79,13 +89,16 @@ enum PTPOperationPolicyError: Error, Equatable, LocalizedError {
 struct PTPOperationPolicy {
     private let approvedWriteParameters: Set<CameraParameter>
     private let approvedWritePropertyCodes: [CameraParameter: UInt16]
+    private let approvedLiveViewSizeRawValues: Set<UInt32>
 
     init(
         approvedWriteParameters: Set<CameraParameter> = Set(CameraParameter.allCases),
-        approvedWritePropertyCodes: [CameraParameter: UInt16] = Self.nikonZ6IIIImmediateWritePropertyCodes
+        approvedWritePropertyCodes: [CameraParameter: UInt16] = Self.nikonZ6IIIImmediateWritePropertyCodes,
+        approvedLiveViewSizeRawValues: Set<UInt32> = Self.nikonZ6IIIObservedLiveViewSizeRawValues
     ) {
         self.approvedWriteParameters = approvedWriteParameters
         self.approvedWritePropertyCodes = approvedWritePropertyCodes
+        self.approvedLiveViewSizeRawValues = approvedLiveViewSizeRawValues
     }
 
     static let nikonZ6IIIImmediateWritePropertyCodes: [CameraParameter: UInt16] = [
@@ -98,6 +111,7 @@ struct PTPOperationPolicy {
     ]
 
     static let nikonZ6IIIWriteApprovedParameters = Set(nikonZ6IIIImmediateWritePropertyCodes.keys)
+    static let nikonZ6IIIObservedLiveViewSizeRawValues: Set<UInt32> = [1, 2, 3]
 
     static func nikonZ6IIIImmediateControlPolicy() -> PTPOperationPolicy {
         PTPOperationPolicy(approvedWriteParameters: nikonZ6IIIWriteApprovedParameters)
@@ -175,10 +189,44 @@ struct PTPOperationPolicy {
                 outboundData: encodedValue,
                 diagnosticName: "ptp.setDevicePropValue.\(parameter.rawValue)"
             )
+        case .selectNikonLiveViewSize(let propertyCode, let encodedValue):
+            guard propertyCode == NikonPTPDeviceProperty.liveViewSize else {
+                throw PTPOperationPolicyError.mismatchedLiveViewSizeProperty(
+                    expected: NikonPTPDeviceProperty.liveViewSize,
+                    actual: propertyCode
+                )
+            }
+            guard !encodedValue.isEmpty else {
+                throw PTPOperationPolicyError.emptyLiveViewSizePayload
+            }
+            let rawValue = try Self.liveViewSizeRawValue(from: encodedValue)
+            guard approvedLiveViewSizeRawValues.contains(rawValue) else {
+                throw PTPOperationPolicyError.unsupportedLiveViewSizeRawValue(rawValue)
+            }
+            return PTPOperationRequest(
+                operation: .setDevicePropValue,
+                parameters: [UInt32(propertyCode)],
+                dataPhase: .outboundDataRequired,
+                outboundData: encodedValue,
+                diagnosticName: "ptp.setDevicePropValue.nikonLiveViewSize"
+            )
         case .forbidden(let operation):
             throw PTPOperationPolicyError.forbiddenOperation(operation)
         case .raw(let operationCode, _, _):
             throw PTPOperationPolicyError.rawOperationBypass(operationCode)
+        }
+    }
+
+    private static func liveViewSizeRawValue(from encodedValue: Data) throws -> UInt32 {
+        switch encodedValue.count {
+        case 1:
+            return UInt32(try encodedValue.readUInt8(at: 0))
+        case 2:
+            return UInt32(try encodedValue.readLittleEndianUInt16(at: 0))
+        case 4:
+            return try encodedValue.readLittleEndianUInt32(at: 0)
+        default:
+            throw PTPOperationPolicyError.unsupportedLiveViewSizeRawValue(UInt32.max)
         }
     }
 }

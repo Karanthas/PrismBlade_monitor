@@ -107,7 +107,10 @@ final class PTPAllowlistTests: XCTestCase {
         XCTAssertEqual(deviceInfo.manufacturer, "Nikon")
         XCTAssertEqual(deviceInfo.model, "Z6_3")
         XCTAssertEqual(deviceInfo.devicePropertiesSupported, [0x5001, 0x5007, 0xD100])
-        XCTAssertEqual(deviceInfo.probePropertyCodes(limit: 3), [0x5001, 0x5007, 0xD100])
+        XCTAssertEqual(deviceInfo.probePropertyCodes(limit: 3), [0x5001, 0x5007, PTPDevicePropertyCatalog.nikonLiveViewSize])
+        XCTAssertEqual(deviceInfo.probePropertyCodes(limit: 0), [])
+        XCTAssertEqual(PTPDevicePropertyCatalog.name(for: PTPDevicePropertyCatalog.nikonLiveViewSize), "NikonLiveViewImageSize")
+        XCTAssertEqual(PTPDevicePropertyCatalog.name(for: 0xD1B0), "NikonExposureDisplayStatus")
         XCTAssertEqual(deviceInfo.evidence["serialNumber"], "REDACTED")
         XCTAssertEqual(deviceInfo.evidence["supportedDeviceProperties"], "0x5001,0x5007,0xD100")
     }

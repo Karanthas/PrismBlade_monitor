@@ -13,8 +13,10 @@ final class NikonLiveViewFrameSource: FrameSource, FrameSourceConnectionLossRepo
     private let decoder: JPEGPixelBufferDecoder
     private let nominalFrameRate: Double
     private let metadata: FrameCameraMetadata
+    private let diagnosticsLog: AppDiagnosticsLog?
     private let sessionState = NikonLiveViewFrameSourceSessionState()
 
+    private var sessionEvidence = NikonLiveViewSessionEvidence.inconclusive
     private var continuation: AsyncStream<VideoFrame>.Continuation?
     private var task: Task<Void, Never>?
     private var sequence = 0
@@ -24,13 +26,15 @@ final class NikonLiveViewFrameSource: FrameSource, FrameSourceConnectionLossRepo
         payloadParser: NikonLiveViewPayloadParser = NikonLiveViewPayloadParser(),
         decoder: JPEGPixelBufferDecoder = JPEGPixelBufferDecoder(),
         nominalFrameRate: Double = 30,
-        metadata: FrameCameraMetadata = FrameCameraMetadata(iso: "-", shutter: "-", aperture: "-", whiteBalance: "-")
+        metadata: FrameCameraMetadata = FrameCameraMetadata(iso: "-", shutter: "-", aperture: "-", whiteBalance: "-"),
+        diagnosticsLog: AppDiagnosticsLog? = nil
     ) {
         self.runtime = runtime
         self.payloadParser = payloadParser
         self.decoder = decoder
         self.nominalFrameRate = nominalFrameRate
         self.metadata = metadata
+        self.diagnosticsLog = diagnosticsLog
     }
 
     func start() async throws {
@@ -40,6 +44,7 @@ final class NikonLiveViewFrameSource: FrameSource, FrameSourceConnectionLossRepo
         didFailFromConnectionLoss = false
         sequence = 0
 
+        sessionEvidence = try await runtime.liveViewSessionEvidence()
         try await runtime.startLiveViewSession()
         await sessionState.begin()
 
@@ -72,14 +77,16 @@ final class NikonLiveViewFrameSource: FrameSource, FrameSourceConnectionLossRepo
                 let jpegData = try payloadParser.extractJPEG(from: payload)
                 let pixelBuffer = try decoder.decode(jpegData)
                 sequence += 1
+                let decodedSize = CGSize(
+                    width: CVPixelBufferGetWidth(pixelBuffer),
+                    height: CVPixelBufferGetHeight(pixelBuffer)
+                )
+                recordDecodedFrameSizeIfNeeded(decodedSize)
 
                 let currentFormat = FrameFormat(
-                    resolution: CGSize(
-                        width: CVPixelBufferGetWidth(pixelBuffer),
-                        height: CVPixelBufferGetHeight(pixelBuffer)
-                    ),
+                    resolution: decodedSize,
                     frameRate: nominalFrameRate,
-                    colorEncoding: .rec709
+                    colorEncoding: sessionEvidence.colorEncoding ?? .unknown
                 )
                 format = currentFormat
 
@@ -101,6 +108,16 @@ final class NikonLiveViewFrameSource: FrameSource, FrameSourceConnectionLossRepo
         }
 
         await cleanupLiveViewIfNeeded()
+    }
+
+    private func recordDecodedFrameSizeIfNeeded(_ decodedSize: CGSize) {
+        guard sessionEvidence.decodedFrameSize == nil else { return }
+        sessionEvidence.decodedFrameSize = decodedSize
+        sessionEvidence.liveViewSizeEvidence.decodedFrameSize = decodedSize
+        sessionEvidence.liveViewSizeEvidence.sourceIs1920x1080 =
+            Int(decodedSize.width) == 1920 &&
+            Int(decodedSize.height) == 1080
+        diagnosticsLog?.record("camera.liveView.decodedFrame", fields: sessionEvidence.evidenceFields)
     }
 
     private func cleanupLiveViewIfNeeded() async {

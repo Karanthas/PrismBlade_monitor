@@ -3,6 +3,28 @@ import XCTest
 
 @MainActor
 final class MonitorSessionRealCameraTests: XCTestCase {
+    func testDiagnosticsLogMirrorsEntriesToJSONLFileWhenConfigured() throws {
+        let mirrorURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: false)
+            .appendingPathExtension("jsonl")
+        defer { try? FileManager.default.removeItem(at: mirrorURL) }
+
+        let log = AppDiagnosticsLog(mirrorFileURL: mirrorURL)
+
+        log.record("diagnostics.test", fields: ["value": "1080p"])
+
+        let mirrorText = try String(contentsOf: mirrorURL, encoding: .utf8)
+        XCTAssertTrue(mirrorText.contains(#""event":"diagnostics.test""#))
+        XCTAssertTrue(mirrorText.contains(#""value":"1080p""#))
+        XCTAssertEqual(log.exportText().split(separator: "\n").count, 1)
+
+        log.clear()
+
+        let clearedText = try String(contentsOf: mirrorURL, encoding: .utf8)
+        XCTAssertFalse(clearedText.contains(#""event":"diagnostics.test""#))
+        XCTAssertTrue(clearedText.contains(#""event":"diagnostics.cleared""#))
+    }
+
     func testAppEnvironmentDefaultsToMockCameraUntilRealCameraIsExplicitlyRequested() {
         withRealCameraPreference(false) {
             let session = AppEnvironment.makeMonitorSession(arguments: ["PrismBlade"])
@@ -100,6 +122,24 @@ final class MonitorSessionRealCameraTests: XCTestCase {
         try await waitUntil { session.state.connection.isConnected }
 
         XCTAssertEqual(session.state.camera.exposureMode.current, ExposureMode.aperturePriority.rawValue)
+    }
+
+    func testModeLockedParameterSubmitRecordsWriteDiagnostic() async throws {
+        var realState = CameraState.mockInitial
+        realState.exposureMode.current = ExposureMode.aperturePriority.rawValue
+        realState.shutter.isWritable = true
+        let session = makeSession(frameSource: InspectableFrameSource(), transport: InspectableCameraTransport(state: realState))
+
+        session.startMonitoring()
+        try await waitUntil { session.state.connection.isConnected }
+
+        session.setCameraParameter(.shutter, to: "1/100")
+
+        let logText = session.diagnosticLogText()
+        XCTAssertTrue(logText.contains(#""event":"camera.parameter.blocked""#))
+        XCTAssertTrue(logText.contains(#""blockReason":"modeLock""#))
+        XCTAssertTrue(logText.contains(#""attempted.display":"1\/100""#))
+        XCTAssertTrue(logText.contains(#""propertyName":"ExposureTime""#))
     }
 
     func testLiveViewDecodeFailureDoesNotDisconnectControlTransport() async throws {

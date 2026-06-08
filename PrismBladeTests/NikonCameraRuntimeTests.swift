@@ -52,10 +52,11 @@ final class NikonCameraRuntimeTests: XCTestCase {
         do {
             _ = try await runtime.setValue("800", for: .iso)
             XCTFail("Stale readback should fail even when the write command returns OK.")
-        } catch NikonCameraRuntimeError.readbackMismatch(let parameter, let expected, let actual) {
-            XCTAssertEqual(parameter, .iso)
-            XCTAssertEqual(expected, "800")
-            XCTAssertEqual(actual, "400")
+        } catch NikonCameraRuntimeError.parameterWriteFailed(let diagnostic) {
+            XCTAssertEqual(diagnostic.parameterName, CameraParameter.iso.rawValue)
+            XCTAssertEqual(diagnostic.blockReason, .readbackMismatch)
+            XCTAssertEqual(diagnostic.attemptedValue?.raw, "800")
+            XCTAssertEqual(diagnostic.readbackValue?.display, "400")
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -107,15 +108,96 @@ final class NikonCameraRuntimeTests: XCTestCase {
         do {
             _ = try await runtime.setValue("1600", for: .iso)
             XCTFail("Out-of-range descriptor values should fail before write.")
-        } catch CameraTransportError.unsupportedValue(let parameter, let value) {
-            XCTAssertEqual(parameter, .iso)
-            XCTAssertEqual(value, "1600")
+        } catch NikonCameraRuntimeError.parameterWriteFailed(let diagnostic) {
+            XCTAssertEqual(diagnostic.parameterName, CameraParameter.iso.rawValue)
+            XCTAssertEqual(diagnostic.blockReason, .descriptorRangeRejected)
+            XCTAssertEqual(diagnostic.attemptedValue?.raw, "1600")
+            XCTAssertEqual(diagnostic.descriptor?.permittedRange?.maximum.raw, "800")
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
 
         let writes = await ptp.writeSnapshot()
         XCTAssertEqual(writes.map(\.encodedValue), [Data([0x20, 0x03])])
+    }
+
+    func testReadOnlyDescriptorFailsBeforeWriteWithDiagnostic() async throws {
+        let ptp = ScriptedRuntimePTP(values: [.iso: 400], readOnlyParameters: [.iso])
+        let runtime = makeRuntime(ptp: ptp)
+        _ = try await runtime.connect()
+
+        do {
+            _ = try await runtime.setValue("800", for: .iso)
+            XCTFail("Read-only descriptor should block the write.")
+        } catch NikonCameraRuntimeError.parameterWriteFailed(let diagnostic) {
+            XCTAssertEqual(diagnostic.blockReason, .readOnlyDescriptor)
+            XCTAssertEqual(diagnostic.propertyCode, NikonPTPDeviceProperty.exposureIndex)
+            XCTAssertEqual(diagnostic.descriptor?.access, "readOnly")
+            XCTAssertEqual(diagnostic.attemptedValue?.raw, "800")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        let writes = await ptp.writeSnapshot()
+        XCTAssertTrue(writes.isEmpty)
+    }
+
+    func testUnsupportedDisplayValueFailsBeforeWriteWithDiagnostic() async throws {
+        let ptp = ScriptedRuntimePTP(values: [.iso: 400])
+        let runtime = makeRuntime(ptp: ptp)
+        _ = try await runtime.connect()
+
+        do {
+            _ = try await runtime.setValue("500", for: .iso)
+            XCTFail("Unmapped display value should block before write.")
+        } catch NikonCameraRuntimeError.parameterWriteFailed(let diagnostic) {
+            XCTAssertEqual(diagnostic.blockReason, .unsupportedDisplayValue)
+            XCTAssertEqual(diagnostic.attemptedValue?.raw, "500")
+            XCTAssertEqual(diagnostic.attemptedValue?.display, "500")
+            XCTAssertEqual(diagnostic.descriptor?.permittedValues.map(\.raw).contains("400"), true)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        let writes = await ptp.writeSnapshot()
+        XCTAssertTrue(writes.isEmpty)
+    }
+
+    func testPTPWriteResponseFailureIncludesResponseCodeDiagnostic() async throws {
+        let failingIntent = PTPCommandIntent.writeImmediateControl(
+            parameter: .iso,
+            propertyCode: NikonPTPDeviceProperty.exposureIndex,
+            encodedValue: Data([0x20, 0x03])
+        )
+        let ptp = ScriptedRuntimePTP(values: [.iso: 400], failingIntents: [failingIntent])
+        let runtime = makeRuntime(ptp: ptp)
+        _ = try await runtime.connect()
+
+        do {
+            _ = try await runtime.setValue("800", for: .iso)
+            XCTFail("PTP response errors should be surfaced as write diagnostics.")
+        } catch NikonCameraRuntimeError.parameterWriteFailed(let diagnostic) {
+            XCTAssertEqual(diagnostic.blockReason, .ptpResponseError)
+            XCTAssertEqual(diagnostic.responseCode, PTPResponseCode.generalError.rawValue)
+            XCTAssertEqual(diagnostic.descriptor?.currentValue?.display, "400")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testSuccessfulWriteRecordsDiagnosticEvidenceWhenLogIsProvided() async throws {
+        let diagnosticsLog = AppDiagnosticsLog()
+        let ptp = ScriptedRuntimePTP(values: [.iso: 400])
+        let runtime = makeRuntime(ptp: ptp, diagnosticsLog: diagnosticsLog)
+        _ = try await runtime.connect()
+
+        _ = try await runtime.setValue("800", for: .iso)
+
+        let logText = diagnosticsLog.exportText()
+        XCTAssertTrue(logText.contains(#""event":"camera.parameter.write.succeeded""#))
+        XCTAssertTrue(logText.contains(#""blockReason":"applied""#))
+        XCTAssertTrue(logText.contains(#""attempted.raw":"800""#))
+        XCTAssertTrue(logText.contains(#""readback.display":"800""#))
     }
 
 
@@ -198,7 +280,154 @@ final class NikonCameraRuntimeTests: XCTestCase {
         XCTAssertEqual(operations, [.startLiveView, .getLiveViewImage, .endLiveView])
     }
 
-    private func makeRuntime(ptp: ScriptedRuntimePTP) -> NikonCameraRuntime {
+    func testLiveViewSessionEvidenceClassifiesOnlyKnownDirectColorValues() async throws {
+        let candidate = try XCTUnwrap(NikonPTPDeviceProperty.nLogCandidateCodes.first)
+        let ptp = ScriptedRuntimePTP(
+            values: [:],
+            vendorProperties: [
+                candidate.code: VendorPropertyDescriptor(
+                    dataType: .unsignedInt16,
+                    isWritable: false,
+                    currentValue: 9,
+                    permittedValues: [0, 9]
+                )
+            ]
+        )
+        let classifier = NikonColorEncodingClassifier(directMappings: [
+            NikonColorEncodingClassifier.DirectMapping(
+                propertyCode: candidate.code,
+                rawValue: "9",
+                encoding: .nLog,
+                displayValue: "N-Log"
+            )
+        ])
+        let runtime = makeRuntime(ptp: ptp, colorClassifier: classifier)
+        _ = try await runtime.connect()
+
+        let evidence = try await runtime.liveViewSessionEvidence()
+
+        XCTAssertEqual(evidence.colorEncoding, .nLog)
+        XCTAssertEqual(evidence.evidenceFields["colorEncoding"], "nLog")
+        XCTAssertEqual(evidence.evidenceFields["colorObservation0.current.display"], "N-Log")
+    }
+
+    func testLiveViewSessionEvidenceLeavesUnknownColorValuesInconclusive() async throws {
+        let candidate = try XCTUnwrap(NikonPTPDeviceProperty.nLogCandidateCodes.first)
+        let ptp = ScriptedRuntimePTP(
+            values: [:],
+            vendorProperties: [
+                candidate.code: VendorPropertyDescriptor(
+                    dataType: .unsignedInt16,
+                    isWritable: false,
+                    currentValue: 77,
+                    permittedValues: [77]
+                )
+            ]
+        )
+        let runtime = makeRuntime(ptp: ptp)
+        _ = try await runtime.connect()
+
+        let evidence = try await runtime.liveViewSessionEvidence()
+
+        XCTAssertNil(evidence.colorEncoding)
+        XCTAssertEqual(evidence.evidenceFields["colorEncoding"], "inconclusive")
+        XCTAssertEqual(evidence.evidenceFields["colorObservation0.current.raw"], "77")
+    }
+
+    func testLiveViewSessionEvidenceReadsLiveViewSizeWithoutSelectingUnknownMapping() async throws {
+        let ptp = ScriptedRuntimePTP(
+            values: [:],
+            vendorProperties: [
+                NikonPTPDeviceProperty.liveViewSize: VendorPropertyDescriptor(
+                    dataType: .unsignedInt16,
+                    isWritable: true,
+                    currentValue: 1,
+                    permittedValues: [1, 2]
+                )
+            ]
+        )
+        let runtime = makeRuntime(ptp: ptp)
+        _ = try await runtime.connect()
+
+        let evidence = try await runtime.liveViewSessionEvidence()
+
+        XCTAssertNil(evidence.selectedLiveViewSize)
+        XCTAssertEqual(evidence.liveViewSizeEvidence.evidenceFields["liveViewSize.propertyCode"], "0xD1AC")
+        XCTAssertEqual(evidence.liveViewSizeEvidence.evidenceFields["liveViewSizeReason"], "No preferred Nikon liveviewsize raw value is configured.")
+        let writes = await ptp.writeSnapshot()
+        XCTAssertTrue(writes.isEmpty)
+    }
+
+    func testLiveViewSessionEvidenceSelectsVerifiedLiveViewSizeAndReadsBack() async throws {
+        let diagnosticsLog = AppDiagnosticsLog()
+        let ptp = ScriptedRuntimePTP(
+            values: [:],
+            vendorProperties: [
+                NikonPTPDeviceProperty.liveViewSize: VendorPropertyDescriptor(
+                    dataType: .unsignedInt16,
+                    isWritable: true,
+                    currentValue: 1,
+                    permittedValues: [1, 2, 3]
+                )
+            ]
+        )
+        let runtime = makeRuntime(
+            ptp: ptp,
+            liveViewSizeSelector: .nikonZ6IIILargestObservedLiveViewSize,
+            diagnosticsLog: diagnosticsLog
+        )
+        _ = try await runtime.connect()
+
+        let evidence = try await runtime.liveViewSessionEvidence()
+
+        XCTAssertEqual(evidence.selectedLiveViewSize?.display, "1024x576")
+        XCTAssertEqual(evidence.liveViewSizeEvidence.evidenceFields["liveViewSize.current.raw"], "3")
+        XCTAssertEqual(evidence.liveViewSizeEvidence.evidenceFields["selectedLiveViewSize.raw"], "3")
+        XCTAssertEqual(evidence.liveViewSizeEvidence.evidenceFields["liveViewSizeSourceIs1920x1080"], "false")
+        let writes = await ptp.writeSnapshot()
+        XCTAssertEqual(writes, [ScriptedRuntimePTP.Write(propertyCode: NikonPTPDeviceProperty.liveViewSize, encodedValue: Data([0x03, 0x00]))])
+        let logText = diagnosticsLog.exportText()
+        XCTAssertTrue(logText.contains(#""event":"camera.liveView.evidence""#))
+        XCTAssertTrue(logText.contains(#""selectedLiveViewSize.raw":"3""#))
+    }
+
+    func testLiveViewSessionEvidenceReportsLiveViewSizeWriteRejectionSeparatelyFromReadFailures() async throws {
+        let failingIntent = PTPCommandIntent.selectNikonLiveViewSize(
+            propertyCode: NikonPTPDeviceProperty.liveViewSize,
+            encodedValue: Data([0x02, 0x00])
+        )
+        let ptp = ScriptedRuntimePTP(
+            values: [:],
+            vendorProperties: [
+                NikonPTPDeviceProperty.liveViewSize: VendorPropertyDescriptor(
+                    dataType: .unsignedInt16,
+                    isWritable: true,
+                    currentValue: 1,
+                    permittedValues: [1, 2]
+                )
+            ],
+            failingIntents: [failingIntent]
+        )
+        let selector = NikonLiveViewSizeSelector(preferredValue: PropertyValueObservation(raw: "2", display: "640x360"))
+        let runtime = makeRuntime(ptp: ptp, liveViewSizeSelector: selector)
+        _ = try await runtime.connect()
+
+        let evidence = try await runtime.liveViewSessionEvidence()
+
+        XCTAssertNil(evidence.selectedLiveViewSize)
+        XCTAssertEqual(evidence.liveViewSizeEvidence.evidenceFields["liveViewSize.propertyCode"], "0xD1AC")
+        XCTAssertEqual(
+            evidence.liveViewSizeEvidence.reason,
+            "Nikon liveviewsize write of 640x360 raw 2 returned generalError (0x2002)."
+        )
+    }
+
+    private func makeRuntime(
+        ptp: ScriptedRuntimePTP,
+        colorClassifier: NikonColorEncodingClassifier = NikonColorEncodingClassifier(),
+        liveViewSizeSelector: NikonLiveViewSizeSelector = NikonLiveViewSizeSelector(),
+        diagnosticsLog: AppDiagnosticsLog? = nil
+    ) -> NikonCameraRuntime {
         let discovery = NikonCameraDiscoveryService(
             bridge: StaticNikonCameraDiscoveryBridge(descriptors: [
                 NikonCameraDescriptor(
@@ -211,7 +440,13 @@ final class NikonCameraRuntimeTests: XCTestCase {
                 )
             ])
         )
-        return NikonCameraRuntime(discovery: discovery, ptp: ptp)
+        return NikonCameraRuntime(
+            discovery: discovery,
+            ptp: ptp,
+            colorClassifier: colorClassifier,
+            liveViewSizeSelector: liveViewSizeSelector,
+            diagnosticsLog: diagnosticsLog
+        )
     }
 
     private func waitUntil(
@@ -235,6 +470,8 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
 
     private var values: [CameraParameter: UInt32]
     private let rangeDescriptors: [CameraParameter: RangeDescriptor]
+    private let readOnlyParameters: Set<CameraParameter>
+    private var vendorProperties: [UInt16: VendorPropertyDescriptor]
     private var liveViewPayloads: [Data]
     private var writes: [Write] = []
     private var liveViewOperations: [NikonPTPOperation] = []
@@ -249,6 +486,8 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
     init(
         values: [CameraParameter: UInt32],
         rangeDescriptors: [CameraParameter: RangeDescriptor] = [:],
+        readOnlyParameters: Set<CameraParameter> = [],
+        vendorProperties: [UInt16: VendorPropertyDescriptor] = [:],
         liveViewPayloads: [Data] = [],
         failingIntents: [PTPCommandIntent] = [],
         appliesWrites: Bool = true,
@@ -256,6 +495,8 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
     ) {
         self.values = values
         self.rangeDescriptors = rangeDescriptors
+        self.readOnlyParameters = readOnlyParameters
+        self.vendorProperties = vendorProperties
         self.liveViewPayloads = liveViewPayloads
         self.failingIntents = failingIntents
         self.appliesWrites = appliesWrites
@@ -271,10 +512,25 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
         case .readDeviceInfo:
             return result(for: intent, operation: .getDeviceInfo, payload: Data())
         case .readPropertyDescription(let propertyCode):
-            let mapping = mapping(propertyCode: propertyCode)
+            if let vendorProperty = vendorProperties[propertyCode] {
+                return result(for: intent, operation: .getDevicePropDesc, payload: descriptorPayload(propertyCode: propertyCode, descriptor: vendorProperty))
+            }
+            guard let mapping = mappingIfAvailable(propertyCode: propertyCode) else {
+                throw PTPClientError.responseError(code: .operationNotSupported, rawCode: PTPResponseCode.operationNotSupported.rawValue)
+            }
             return result(for: intent, operation: .getDevicePropDesc, payload: descriptorPayload(mapping: mapping))
         case .readPropertyValue(let propertyCode):
-            let mapping = mapping(propertyCode: propertyCode)
+            if let vendorProperty = vendorProperties[propertyCode] {
+                readValues += 1
+                return result(
+                    for: intent,
+                    operation: .getDevicePropValue,
+                    payload: NikonPropertyDescriptorParser.encodeValue(vendorProperty.currentValue, dataType: vendorProperty.dataType)
+                )
+            }
+            guard let mapping = mappingIfAvailable(propertyCode: propertyCode) else {
+                throw PTPClientError.responseError(code: .operationNotSupported, rawCode: PTPResponseCode.operationNotSupported.rawValue)
+            }
             readValues += 1
             let rawValue = values[mapping.parameter] ?? defaultRawValue(for: mapping.parameter)
             return result(
@@ -291,6 +547,16 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
                 return try await withCheckedThrowingContinuation { continuation in
                     pendingWriteContinuations.append(continuation)
                 }
+            }
+            return result(for: intent, operation: .setDevicePropValue, payload: Data())
+        case .selectNikonLiveViewSize(let propertyCode, let encodedValue):
+            writes.append(Write(propertyCode: propertyCode, encodedValue: encodedValue))
+            guard var vendorProperty = vendorProperties[propertyCode] else {
+                throw PTPClientError.responseError(code: .operationNotSupported, rawCode: PTPResponseCode.operationNotSupported.rawValue)
+            }
+            if appliesWrites {
+                vendorProperty.currentValue = try NikonPropertyDescriptorParser.decodeValue(encodedValue, dataType: vendorProperty.dataType)
+                vendorProperties[propertyCode] = vendorProperty
             }
             return result(for: intent, operation: .setDevicePropValue, payload: Data())
         case .liveViewStart:
@@ -346,12 +612,19 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
     }
 
     private func mapping(propertyCode: UInt16) -> NikonCameraPropertyMapping {
+        guard let mapping = mappingIfAvailable(propertyCode: propertyCode) else {
+            fatalError("Unknown property code \(propertyCode)")
+        }
+        return mapping
+    }
+
+    private func mappingIfAvailable(propertyCode: UInt16) -> NikonCameraPropertyMapping? {
         for parameter in CameraParameter.allCases {
             if let mapping = mapper.mapping(for: parameter), mapping.propertyCode == propertyCode {
                 return mapping
             }
         }
-        fatalError("Unknown property code \(propertyCode)")
+        return nil
     }
 
     private func descriptorPayload(mapping: NikonCameraPropertyMapping) -> Data {
@@ -361,7 +634,7 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
         var data = Data()
         data.appendLittleEndian(mapping.propertyCode)
         data.appendLittleEndian(mapping.dataType.rawValue)
-        data.append(mapping.isWriteApproved ? 1 : 0)
+        data.append(mapping.isWriteApproved && !readOnlyParameters.contains(mapping.parameter) ? 1 : 0)
         data.append(NikonPropertyDescriptorParser.encodeValue(defaultValue, dataType: mapping.dataType))
         data.append(NikonPropertyDescriptorParser.encodeValue(currentValue, dataType: mapping.dataType))
         if let range = rangeDescriptors[mapping.parameter] {
@@ -375,6 +648,21 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
         data.appendLittleEndian(UInt16(rawValues.count))
         rawValues.forEach {
             data.append(NikonPropertyDescriptorParser.encodeValue($0, dataType: mapping.dataType))
+        }
+        return data
+    }
+
+    private func descriptorPayload(propertyCode: UInt16, descriptor: VendorPropertyDescriptor) -> Data {
+        var data = Data()
+        data.appendLittleEndian(propertyCode)
+        data.appendLittleEndian(descriptor.dataType.rawValue)
+        data.append(descriptor.isWritable ? 1 : 0)
+        data.append(NikonPropertyDescriptorParser.encodeValue(descriptor.currentValue, dataType: descriptor.dataType))
+        data.append(NikonPropertyDescriptorParser.encodeValue(descriptor.currentValue, dataType: descriptor.dataType))
+        data.append(2)
+        data.appendLittleEndian(UInt16(descriptor.permittedValues.count))
+        descriptor.permittedValues.forEach {
+            data.append(NikonPropertyDescriptorParser.encodeValue($0, dataType: descriptor.dataType))
         }
         return data
     }
@@ -419,4 +707,11 @@ private struct RangeDescriptor: Equatable {
     var minimum: UInt32
     var maximum: UInt32
     var step: UInt32
+}
+
+private struct VendorPropertyDescriptor: Equatable {
+    var dataType: PTPDevicePropertyDataType
+    var isWritable: Bool
+    var currentValue: UInt32
+    var permittedValues: [UInt32]
 }

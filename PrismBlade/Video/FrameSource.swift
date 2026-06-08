@@ -41,6 +41,7 @@ struct FrameFormat: Equatable, Sendable {
 }
 
 enum SourceColorEncoding: String, Sendable {
+    case unknown = "Unknown"
     case rec709 = "Rec.709"
     case nLog = "N-Log"
     case hlg = "HLG"

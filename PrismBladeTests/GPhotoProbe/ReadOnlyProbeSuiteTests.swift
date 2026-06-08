@@ -104,7 +104,14 @@ final class ReadOnlyProbeSuiteTests: XCTestCase {
         let results = await suite.runReadOnlySuite(logStore: store)
 
         let propertyPackets = transport.sentPackets.filter { $0.command == .getDevicePropDesc || $0.command == .getDevicePropValue }
-        XCTAssertEqual(propertyPackets.map(\.parameters), [[0x5001], [0x5001], [0x5007], [0x5007]])
+        XCTAssertEqual(propertyPackets.map(\.parameters), [
+            [0x5001],
+            [0x5001],
+            [0x5007],
+            [0x5007],
+            [UInt32(PTPDevicePropertyCatalog.nikonLiveViewSize)],
+            [UInt32(PTPDevicePropertyCatalog.nikonLiveViewSize)]
+        ])
         XCTAssertEqual(results.first { $0.command == .abilities }?.evidence["supportedDeviceProperties"], "0x5001,0x5007")
         XCTAssertTrue(results.contains { $0.evidence["devicePropertyName"] == "FNumber" })
 
