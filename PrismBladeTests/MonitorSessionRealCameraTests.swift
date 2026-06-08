@@ -139,7 +139,41 @@ final class MonitorSessionRealCameraTests: XCTestCase {
         XCTAssertTrue(logText.contains(#""event":"camera.parameter.blocked""#))
         XCTAssertTrue(logText.contains(#""blockReason":"modeLock""#))
         XCTAssertTrue(logText.contains(#""attempted.display":"1\/100""#))
-        XCTAssertTrue(logText.contains(#""propertyName":"ExposureTime""#))
+        XCTAssertTrue(logText.contains(#""propertyName":"NikonExposureTime""#))
+    }
+
+    func testReadbackMismatchAppliesCameraReadbackState() async throws {
+        var initialState = CameraState.mockInitial
+        initialState.iso.current = "400"
+        var readbackState = initialState
+        readbackState.iso.current = "640"
+        let diagnostic = CameraParameterWriteDiagnostic(
+            parameterName: CameraParameter.iso.rawValue,
+            propertyCode: NikonPTPDeviceProperty.exposureIndex,
+            descriptor: nil,
+            attemptedValue: PropertyValueObservation(raw: "800", display: "800"),
+            responseCode: PTPResponseCode.ok.rawValue,
+            readbackValue: PropertyValueObservation(raw: "640", display: "640"),
+            blockReason: .readbackMismatch,
+            userMessage: "ISO 已由相机接受，但当前值由机身状态决定。"
+        )
+        let transport = ReadbackMismatchCameraTransport(
+            initialState: initialState,
+            readbackState: readbackState,
+            diagnostic: diagnostic
+        )
+        let session = makeSession(frameSource: InspectableFrameSource(), transport: transport)
+
+        session.startMonitoring()
+        try await waitUntil { session.state.connection.isConnected }
+
+        session.setCameraParameter(.iso, to: "800")
+        try await waitUntil { session.state.camera.iso.current == "640" }
+
+        XCTAssertTrue(session.lastUserMessage?.contains("机身状态") == true)
+        let logText = session.diagnosticLogText()
+        XCTAssertTrue(logText.contains(#""event":"camera.parameter.readbackMismatch""#))
+        XCTAssertTrue(logText.contains(#""readback.display":"640""#))
     }
 
     func testLiveViewDecodeFailureDoesNotDisconnectControlTransport() async throws {
@@ -495,6 +529,47 @@ private actor InspectableCameraTransport: CameraTransport {
 
     func connectCount() -> Int {
         connects
+    }
+}
+
+private actor ReadbackMismatchCameraTransport: CameraTransport {
+    private var state: CameraState
+    private let readbackState: CameraState
+    private let diagnostic: CameraParameterWriteDiagnostic
+    private var isConnected = false
+
+    init(
+        initialState: CameraState,
+        readbackState: CameraState,
+        diagnostic: CameraParameterWriteDiagnostic
+    ) {
+        state = initialState
+        self.readbackState = readbackState
+        self.diagnostic = diagnostic
+    }
+
+    func connect() async throws {
+        isConnected = true
+    }
+
+    func disconnect() async {
+        isConnected = false
+    }
+
+    func currentState() async throws -> CameraState {
+        guard isConnected else { throw CameraTransportError.notConnected }
+        return state
+    }
+
+    func setValue(_ value: String, for parameter: CameraParameter) async throws -> CameraState {
+        guard isConnected else { throw CameraTransportError.notConnected }
+        state = readbackState
+        throw NikonCameraRuntimeError.parameterWriteReadbackMismatch(diagnostic, readbackState)
+    }
+
+    func trigger(_ action: CameraAction) async throws -> CameraState {
+        guard isConnected else { throw CameraTransportError.notConnected }
+        return state
     }
 }
 

@@ -331,6 +331,18 @@ final class MonitorSession: ObservableObject {
                     // 只持久化 Mock 模式，方便模拟器复现；真实相机接入时必须以相机读取值为准。
                     defaults.set(value, forKey: DefaultsKey.mockExposureMode)
                 }
+            } catch NikonCameraRuntimeError.parameterWriteReadbackMismatch(let diagnostic, let updatedState) {
+                state.camera = updatedState
+                showUserMessage(diagnostic.userMessage)
+                let fields = [
+                    "parameter": parameter.rawValue,
+                    "value": value,
+                    "errorType": "NikonCameraRuntimeError.parameterWriteReadbackMismatch",
+                    "error": diagnostic.userMessage
+                ].merging(diagnostic.evidenceFields) { _, new in
+                    new
+                }
+                diagnosticsLog.record("camera.parameter.readbackMismatch", fields: fields)
             } catch NikonCameraRuntimeError.parameterWriteFailed(let diagnostic) {
                 showUserMessage(diagnostic.userMessage)
                 let fields = [

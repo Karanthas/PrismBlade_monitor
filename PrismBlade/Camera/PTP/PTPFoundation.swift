@@ -104,7 +104,7 @@ struct PTPOperationPolicy {
     static let nikonZ6IIIImmediateWritePropertyCodes: [CameraParameter: UInt16] = [
         .exposureMode: 0x500E,
         .iso: 0x500F,
-        .shutter: 0x500D,
+        .shutter: NikonPTPDeviceProperty.nikonExposureTime,
         .aperture: 0x5007,
         .whiteBalance: 0x5005,
         .focusMode: 0x500A

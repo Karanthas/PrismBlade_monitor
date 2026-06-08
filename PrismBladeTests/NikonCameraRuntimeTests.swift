@@ -3,7 +3,14 @@ import XCTest
 
 final class NikonCameraRuntimeTests: XCTestCase {
     func testConnectReadsDescriptorsAndMapsCameraState() async throws {
-        let ptp = ScriptedRuntimePTP(values: [.iso: 400, .exposureMode: 1, .shutter: 200, .aperture: 280, .whiteBalance: 4, .focusMode: 2])
+        let ptp = ScriptedRuntimePTP(values: [
+            .iso: 400,
+            .exposureMode: 1,
+            .shutter: NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 50),
+            .aperture: 280,
+            .whiteBalance: 4,
+            .focusMode: 0x8010
+        ])
         let runtime = makeRuntime(ptp: ptp)
 
         let state = try await runtime.connect()
@@ -16,6 +23,83 @@ final class NikonCameraRuntimeTests: XCTestCase {
         XCTAssertEqual(state.focusMode.current, "AF-S")
         XCTAssertTrue(state.focusMode.isWritable)
         XCTAssertTrue(state.iso.isWritable)
+    }
+
+    func testConnectKeepsPartialStateWhenOneDescriptorIsUnsupported() async throws {
+        let diagnosticsLog = AppDiagnosticsLog()
+        let ptp = ScriptedRuntimePTP(
+            values: [.iso: 400, .aperture: 280],
+            unsupportedParameters: [.focusMode]
+        )
+        let runtime = makeRuntime(ptp: ptp, diagnosticsLog: diagnosticsLog)
+
+        let state = try await runtime.connect()
+
+        XCTAssertEqual(state.iso.current, "400")
+        XCTAssertEqual(state.aperture.current, "f/2.8")
+        XCTAssertEqual(state.focusMode.current, "--")
+        XCTAssertEqual(state.focusMode.options, [])
+        XCTAssertFalse(state.focusMode.isWritable)
+        let logText = diagnosticsLog.exportText()
+        XCTAssertTrue(logText.contains(#""event":"camera.parameter.read.failed""#))
+        XCTAssertTrue(logText.contains(#""parameter":"focusMode""#))
+    }
+
+    func testConnectAbortsWhenParameterSnapshotTimesOut() async throws {
+        let ptp = ScriptedRuntimePTP(
+            values: [.iso: 400],
+            readDescriptionErrors: [
+                .iso: .timeout(operationCode: NikonPTPOperation.getDevicePropDesc.rawValue, transactionID: 2, durationMilliseconds: 1_000)
+            ]
+        )
+        let runtime = makeRuntime(ptp: ptp)
+
+        do {
+            _ = try await runtime.connect()
+            XCTFail("Connection-level PTP failures should abort the parameter snapshot.")
+        } catch PTPClientError.timeout(let operationCode, let transactionID, let durationMilliseconds) {
+            XCTAssertEqual(operationCode, NikonPTPOperation.getDevicePropDesc.rawValue)
+            XCTAssertEqual(transactionID, 2)
+            XCTAssertEqual(durationMilliseconds, 1_000)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testRangeDescriptorFallbackValuesCanRoundTripThroughWrite() async throws {
+        let ptp = ScriptedRuntimePTP(
+            values: [.iso: 100],
+            rangeDescriptors: [.iso: RangeDescriptor(minimum: 100, maximum: 200, step: 25)]
+        )
+        let runtime = makeRuntime(ptp: ptp)
+
+        let connected = try await runtime.connect()
+        XCTAssertTrue(connected.iso.options.contains("125"))
+
+        let state = try await runtime.setValue("125", for: .iso)
+
+        XCTAssertEqual(state.iso.current, "125")
+        let writes = await ptp.writeSnapshot()
+        XCTAssertEqual(writes.map(\.propertyCode), [0x500F])
+        XCTAssertEqual(writes.map(\.encodedValue), [Data([0x7D, 0x00])])
+    }
+
+    func testApertureFallbackDisplayCanRoundTripThroughWrite() async throws {
+        let ptp = ScriptedRuntimePTP(
+            values: [.aperture: 180],
+            rangeDescriptors: [.aperture: RangeDescriptor(minimum: 180, maximum: 200, step: 10)]
+        )
+        let runtime = makeRuntime(ptp: ptp)
+
+        let connected = try await runtime.connect()
+        XCTAssertTrue(connected.aperture.options.contains("f/1.9"))
+
+        let state = try await runtime.setValue("f/1.9", for: .aperture)
+
+        XCTAssertEqual(state.aperture.current, "f/1.9")
+        let writes = await ptp.writeSnapshot()
+        XCTAssertEqual(writes.map(\.propertyCode), [0x5007])
+        XCTAssertEqual(writes.map(\.encodedValue), [Data([0xBE, 0x00])])
     }
 
     func testApprovedWriteUsesSetDevicePropValueAndReadsBackState() async throws {
@@ -31,8 +115,28 @@ final class NikonCameraRuntimeTests: XCTestCase {
         XCTAssertEqual(writes.map(\.encodedValue), [Data([0x20, 0x03])])
     }
 
+    func testShutterWriteUsesNikonPackedExposureTimeAndReadback() async throws {
+        let ptp = ScriptedRuntimePTP(values: [
+            .shutter: NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 50)
+        ])
+        let runtime = makeRuntime(ptp: ptp)
+        _ = try await runtime.connect()
+
+        let state = try await runtime.setValue("1/100", for: .shutter)
+
+        XCTAssertEqual(state.shutter.current, "1/100")
+        let writes = await ptp.writeSnapshot()
+        XCTAssertEqual(writes.map(\.propertyCode), [NikonPTPDeviceProperty.nikonExposureTime])
+        XCTAssertEqual(writes.map(\.encodedValue), [
+            NikonPropertyDescriptorParser.encodeValue(
+                NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 100),
+                dataType: .unsignedInt32
+            )
+        ])
+    }
+
     func testFocusModeWriteUsesApprovedPropertyAndReadback() async throws {
-        let ptp = ScriptedRuntimePTP(values: [.focusMode: 2])
+        let ptp = ScriptedRuntimePTP(values: [.focusMode: 0x8010])
         let runtime = makeRuntime(ptp: ptp)
         _ = try await runtime.connect()
 
@@ -41,18 +145,19 @@ final class NikonCameraRuntimeTests: XCTestCase {
         XCTAssertEqual(state.focusMode.current, "AF-C")
         let writes = await ptp.writeSnapshot()
         XCTAssertEqual(writes.map(\.propertyCode), [0x500A])
-        XCTAssertEqual(writes.map(\.encodedValue), [Data([0x03, 0x00])])
+        XCTAssertEqual(writes.map(\.encodedValue), [Data([0x11, 0x80])])
     }
 
-    func testWriteReadbackMismatchFailsAfterCameraAcknowledgement() async throws {
+    func testWriteReadbackMismatchReturnsCameraStateAfterAcknowledgement() async throws {
         let ptp = ScriptedRuntimePTP(values: [.iso: 400], appliesWrites: false)
         let runtime = makeRuntime(ptp: ptp)
         _ = try await runtime.connect()
 
         do {
             _ = try await runtime.setValue("800", for: .iso)
-            XCTFail("Stale readback should fail even when the write command returns OK.")
-        } catch NikonCameraRuntimeError.parameterWriteFailed(let diagnostic) {
+            XCTFail("Stale readback should be reported even when the write command returns OK.")
+        } catch NikonCameraRuntimeError.parameterWriteReadbackMismatch(let diagnostic, let state) {
+            XCTAssertEqual(state.iso.current, "400")
             XCTAssertEqual(diagnostic.parameterName, CameraParameter.iso.rawValue)
             XCTAssertEqual(diagnostic.blockReason, .readbackMismatch)
             XCTAssertEqual(diagnostic.attemptedValue?.raw, "800")
@@ -142,19 +247,39 @@ final class NikonCameraRuntimeTests: XCTestCase {
         XCTAssertTrue(writes.isEmpty)
     }
 
-    func testUnsupportedDisplayValueFailsBeforeWriteWithDiagnostic() async throws {
+    func testDescriptorRejectedFallbackRawValueFailsBeforeWriteWithDiagnostic() async throws {
         let ptp = ScriptedRuntimePTP(values: [.iso: 400])
         let runtime = makeRuntime(ptp: ptp)
         _ = try await runtime.connect()
 
         do {
             _ = try await runtime.setValue("500", for: .iso)
-            XCTFail("Unmapped display value should block before write.")
+            XCTFail("Descriptor-rejected raw value should block before write.")
         } catch NikonCameraRuntimeError.parameterWriteFailed(let diagnostic) {
-            XCTAssertEqual(diagnostic.blockReason, .unsupportedDisplayValue)
+            XCTAssertEqual(diagnostic.blockReason, .unsupportedRawValue)
             XCTAssertEqual(diagnostic.attemptedValue?.raw, "500")
             XCTAssertEqual(diagnostic.attemptedValue?.display, "500")
             XCTAssertEqual(diagnostic.descriptor?.permittedValues.map(\.raw).contains("400"), true)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        let writes = await ptp.writeSnapshot()
+        XCTAssertTrue(writes.isEmpty)
+    }
+
+    func testUnparseableDisplayValueFailsBeforeWriteWithDiagnostic() async throws {
+        let ptp = ScriptedRuntimePTP(values: [.iso: 400])
+        let runtime = makeRuntime(ptp: ptp)
+        _ = try await runtime.connect()
+
+        do {
+            _ = try await runtime.setValue("not-an-iso", for: .iso)
+            XCTFail("Unparseable display value should block before write.")
+        } catch NikonCameraRuntimeError.parameterWriteFailed(let diagnostic) {
+            XCTAssertEqual(diagnostic.blockReason, .unsupportedDisplayValue)
+            XCTAssertEqual(diagnostic.attemptedValue?.raw, "not-an-iso")
+            XCTAssertEqual(diagnostic.attemptedValue?.display, "not-an-iso")
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
@@ -309,6 +434,42 @@ final class NikonCameraRuntimeTests: XCTestCase {
         XCTAssertEqual(evidence.colorEncoding, .nLog)
         XCTAssertEqual(evidence.evidenceFields["colorEncoding"], "nLog")
         XCTAssertEqual(evidence.evidenceFields["colorObservation0.current.display"], "N-Log")
+    }
+
+    func testLiveViewSessionEvidenceClassifiesObservedZ6IIINLogCompositeValues() async throws {
+        let ptp = ScriptedRuntimePTP(
+            values: [:],
+            vendorProperties: [
+                NikonPTPDeviceProperty.nikonVideoToneMode: VendorPropertyDescriptor(
+                    dataType: .unsignedInt8,
+                    isWritable: false,
+                    currentValue: 0,
+                    permittedValues: [0, 1]
+                ),
+                NikonPTPDeviceProperty.nikonFlatPictureControl: VendorPropertyDescriptor(
+                    dataType: .unsignedInt8,
+                    isWritable: false,
+                    currentValue: 0,
+                    permittedValues: [0, 1]
+                ),
+                NikonPTPDeviceProperty.nikonNLogViewAssist: VendorPropertyDescriptor(
+                    dataType: .unsignedInt8,
+                    isWritable: false,
+                    currentValue: 1,
+                    permittedValues: [0, 1]
+                )
+            ]
+        )
+        let runtime = makeRuntime(ptp: ptp)
+        _ = try await runtime.connect()
+
+        let evidence = try await runtime.liveViewSessionEvidence()
+
+        XCTAssertEqual(evidence.colorEncoding, .nLog)
+        XCTAssertEqual(evidence.evidenceFields["colorEncoding"], "nLog")
+        XCTAssertEqual(evidence.evidenceFields["colorConfidence"], "indirect")
+        XCTAssertEqual(evidence.evidenceFields["colorObservationCount"], "3")
+        XCTAssertEqual(evidence.evidenceFields["sessionColorEncoding"], "N-Log")
     }
 
     func testLiveViewSessionEvidenceLeavesUnknownColorValuesInconclusive() async throws {
@@ -471,6 +632,8 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
     private var values: [CameraParameter: UInt32]
     private let rangeDescriptors: [CameraParameter: RangeDescriptor]
     private let readOnlyParameters: Set<CameraParameter>
+    private let unsupportedParameters: Set<CameraParameter>
+    private let readDescriptionErrors: [CameraParameter: PTPClientError]
     private var vendorProperties: [UInt16: VendorPropertyDescriptor]
     private var liveViewPayloads: [Data]
     private var writes: [Write] = []
@@ -487,6 +650,8 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
         values: [CameraParameter: UInt32],
         rangeDescriptors: [CameraParameter: RangeDescriptor] = [:],
         readOnlyParameters: Set<CameraParameter> = [],
+        unsupportedParameters: Set<CameraParameter> = [],
+        readDescriptionErrors: [CameraParameter: PTPClientError] = [:],
         vendorProperties: [UInt16: VendorPropertyDescriptor] = [:],
         liveViewPayloads: [Data] = [],
         failingIntents: [PTPCommandIntent] = [],
@@ -496,6 +661,8 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
         self.values = values
         self.rangeDescriptors = rangeDescriptors
         self.readOnlyParameters = readOnlyParameters
+        self.unsupportedParameters = unsupportedParameters
+        self.readDescriptionErrors = readDescriptionErrors
         self.vendorProperties = vendorProperties
         self.liveViewPayloads = liveViewPayloads
         self.failingIntents = failingIntents
@@ -518,6 +685,12 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
             guard let mapping = mappingIfAvailable(propertyCode: propertyCode) else {
                 throw PTPClientError.responseError(code: .operationNotSupported, rawCode: PTPResponseCode.operationNotSupported.rawValue)
             }
+            guard !unsupportedParameters.contains(mapping.parameter) else {
+                throw PTPClientError.responseError(code: .operationNotSupported, rawCode: PTPResponseCode.operationNotSupported.rawValue)
+            }
+            if let error = readDescriptionErrors[mapping.parameter] {
+                throw error
+            }
             return result(for: intent, operation: .getDevicePropDesc, payload: descriptorPayload(mapping: mapping))
         case .readPropertyValue(let propertyCode):
             if let vendorProperty = vendorProperties[propertyCode] {
@@ -529,6 +702,9 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
                 )
             }
             guard let mapping = mappingIfAvailable(propertyCode: propertyCode) else {
+                throw PTPClientError.responseError(code: .operationNotSupported, rawCode: PTPResponseCode.operationNotSupported.rawValue)
+            }
+            guard !unsupportedParameters.contains(mapping.parameter) else {
                 throw PTPClientError.responseError(code: .operationNotSupported, rawCode: PTPResponseCode.operationNotSupported.rawValue)
             }
             readValues += 1
@@ -674,7 +850,7 @@ private actor ScriptedRuntimePTP: NikonRuntimePTPSending {
         case .iso:
             return 400
         case .shutter:
-            return 200
+            return NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 50)
         case .aperture:
             return 280
         case .whiteBalance:

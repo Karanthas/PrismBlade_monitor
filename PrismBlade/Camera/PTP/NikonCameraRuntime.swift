@@ -160,11 +160,297 @@ struct NikonCameraPropertyMapping: Equatable {
     var isWriteApproved: Bool
 
     func displayValue(for rawValue: UInt32) -> String {
-        rawToDisplay[rawValue] ?? "\(rawValue)"
+        if let displayValue = rawToDisplay[rawValue] {
+            return displayValue
+        }
+
+        switch parameter {
+        case .iso:
+            return "\(rawValue)"
+        case .shutter:
+            return Self.nikonExposureTimeDisplay(rawValue)
+        case .aperture:
+            return "f/\(Self.formatDecimal(Double(rawValue) / 100.0))"
+        case .whiteBalance:
+            return Self.whiteBalanceDisplay(rawValue)
+        case .focusMode:
+            return Self.focusModeDisplay(rawValue)
+        case .exposureMode:
+            return Self.exposureModeDisplay(rawValue)
+        }
     }
 
     func rawValue(for displayValue: String) -> UInt32? {
-        rawToDisplay.first { $0.value == displayValue }?.key
+        let normalizedValue = Self.normalized(displayValue)
+        if let rawValue = rawToDisplay.first(where: { Self.normalized($0.value) == normalizedValue })?.key {
+            return rawValue
+        }
+
+        switch parameter {
+        case .iso:
+            return Self.rawISO(from: displayValue)
+        case .shutter:
+            return Self.rawNikonExposureTime(from: displayValue)
+        case .aperture:
+            return Self.rawAperture(from: displayValue)
+        case .whiteBalance:
+            return Self.rawWhiteBalance(from: displayValue)
+        case .focusMode:
+            return Self.rawFocusMode(from: displayValue)
+        case .exposureMode:
+            return Self.rawExposureMode(from: displayValue)
+        }
+    }
+
+    private static func rawISO(from displayValue: String) -> UInt32? {
+        let trimmed = displayValue
+            .replacingOccurrences(of: "ISO", with: "", options: .caseInsensitive)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return UInt32(trimmed)
+    }
+
+    static func nikonExposureTimeRaw(numerator: UInt32, denominator: UInt32) -> UInt32 {
+        (numerator << 16) | denominator
+    }
+
+    private static func rawNikonExposureTime(from displayValue: String) -> UInt32? {
+        let trimmed = displayValue
+            .replacingOccurrences(of: "sec", with: "", options: .caseInsensitive)
+            .replacingOccurrences(of: "s", with: "", options: .caseInsensitive)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch normalized(trimmed) {
+        case "bulb":
+            return 0xFFFFFFFF
+        case "time":
+            return 0xFFFFFFFD
+        case "x 200", "x200":
+            return 0xFFFFFFFE
+        default:
+            break
+        }
+
+        if trimmed.contains("/") {
+            let parts = trimmed.split(separator: "/", maxSplits: 1).map(String.init)
+            guard parts.count == 2,
+                  let numerator = UInt32(parts[0].trimmingCharacters(in: .whitespacesAndNewlines)),
+                  let denominator = UInt32(parts[1].trimmingCharacters(in: .whitespacesAndNewlines)),
+                  numerator > 0,
+                  denominator > 0,
+                  numerator <= UInt32(UInt16.max),
+                  denominator <= UInt32(UInt16.max) else {
+                return nil
+            }
+            return nikonExposureTimeRaw(numerator: numerator, denominator: denominator)
+        }
+
+        guard let seconds = Double(trimmed), seconds > 0 else { return nil }
+        if seconds.rounded() == seconds, seconds <= Double(UInt32.max >> 16) {
+            return nikonExposureTimeRaw(numerator: UInt32(seconds), denominator: 1)
+        }
+
+        return closestNikonExposureTimeRaw(forSeconds: seconds)
+    }
+
+    private static func rawAperture(from displayValue: String) -> UInt32? {
+        let trimmed = displayValue
+            .replacingOccurrences(of: "f/", with: "", options: .caseInsensitive)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let aperture = Double(trimmed), aperture >= 0 else { return nil }
+        return UInt32((aperture * 100.0).rounded())
+    }
+
+    private static func rawWhiteBalance(from displayValue: String) -> UInt32? {
+        switch normalized(displayValue) {
+        case "auto":
+            return 0x0002
+        case "daylight", "sunny", "5600k":
+            return 0x0004
+        case "fluorescent", "4300k":
+            return 0x0005
+        case "tungsten", "incandescent", "3200k":
+            return 0x0006
+        case "flash", "6500k":
+            return 0x0007
+        default:
+            return rawVendorValue(from: displayValue)
+        }
+    }
+
+    private static func rawFocusMode(from displayValue: String) -> UInt32? {
+        switch normalized(displayValue) {
+        case "mf", "manual":
+            return 0x0001
+        case "auto", "automatic":
+            return 0x0002
+        case "auto macro", "automacro":
+            return 0x0003
+        case "af-s":
+            return 0x8010
+        case "af-c":
+            return 0x8011
+        case "af-a":
+            return 0x8012
+        case "af-f":
+            return 0x8013
+        default:
+            return rawVendorValue(from: displayValue)
+        }
+    }
+
+    private static func rawExposureMode(from displayValue: String) -> UInt32? {
+        switch normalized(displayValue) {
+        case "auto":
+            return 0x0000
+        case "m", "manual":
+            return 0x0001
+        case "p", "program", "normal program", "normalprogram":
+            return 0x0002
+        case "a", "aperture priority", "aperturepriority":
+            return 0x0003
+        case "s", "shutter priority", "shutterpriority":
+            return 0x0004
+        default:
+            return rawVendorValue(from: displayValue)
+        }
+    }
+
+    private static func whiteBalanceDisplay(_ rawValue: UInt32) -> String {
+        switch rawValue {
+        case 0x0001:
+            return "Manual"
+        case 0x0002:
+            return "Auto"
+        case 0x0003:
+            return "One-push auto"
+        case 0x0004:
+            return "5600K"
+        case 0x0005:
+            return "4300K"
+        case 0x0006:
+            return "3200K"
+        case 0x0007:
+            return "6500K"
+        default:
+            return vendorOrRaw(rawValue)
+        }
+    }
+
+    private static func focusModeDisplay(_ rawValue: UInt32) -> String {
+        switch rawValue {
+        case 0x0001:
+            return "MF"
+        case 0x0002:
+            return "Auto"
+        case 0x0003:
+            return "Auto macro"
+        case 0x8010:
+            return "AF-S"
+        case 0x8011:
+            return "AF-C"
+        case 0x8012:
+            return "AF-A"
+        case 0x8013:
+            return "AF-F"
+        default:
+            return vendorOrRaw(rawValue)
+        }
+    }
+
+    private static func exposureModeDisplay(_ rawValue: UInt32) -> String {
+        switch rawValue {
+        case 0x0000:
+            return ExposureMode.auto.rawValue
+        case 0x0001:
+            return ExposureMode.manual.rawValue
+        case 0x0002:
+            return ExposureMode.program.rawValue
+        case 0x0003:
+            return ExposureMode.aperturePriority.rawValue
+        case 0x0004:
+            return ExposureMode.shutterPriority.rawValue
+        case 0x0005:
+            return "Creative"
+        case 0x0006:
+            return "Action"
+        case 0x0007:
+            return "Portrait"
+        case 0x0008:
+            return "Landscape"
+        default:
+            return vendorOrRaw(rawValue)
+        }
+    }
+
+    private static func nikonExposureTimeDisplay(_ rawValue: UInt32) -> String {
+        switch rawValue {
+        case 0xFFFFFFFF:
+            return "Bulb"
+        case 0xFFFFFFFE:
+            return "x 200"
+        case 0xFFFFFFFD:
+            return "Time"
+        default:
+            break
+        }
+
+        let numerator = rawValue >> 16
+        let denominator = rawValue & 0xFFFF
+        guard numerator > 0, denominator > 0 else { return "\(rawValue)" }
+        if denominator == 1 {
+            return "\(numerator) s"
+        }
+        return "\(numerator)/\(denominator)"
+    }
+
+    private static func closestNikonExposureTimeRaw(forSeconds seconds: Double) -> UInt32? {
+        let denominators: [UInt32] = [
+            2, 3, 4, 5, 6, 8, 10, 13, 15, 20, 24, 25, 30, 40, 48, 50, 60, 80,
+            100, 120, 125, 160, 200, 240, 250, 320, 400, 500, 640, 800, 1_000,
+            1_250, 1_600, 2_000, 2_500, 3_200, 4_000, 5_000, 6_400, 8_000
+        ]
+        for denominator in denominators {
+            let numerator = (seconds * Double(denominator)).rounded()
+            guard numerator > 0, numerator <= Double(UInt32.max >> 16) else { continue }
+            let resolvedSeconds = numerator / Double(denominator)
+            if abs(resolvedSeconds - seconds) < 0.000_001 {
+                return nikonExposureTimeRaw(numerator: UInt32(numerator), denominator: denominator)
+            }
+        }
+        return nil
+    }
+
+    private static func formatDecimal(_ value: Double, maximumFractionDigits: Int = 1) -> String {
+        let normalizedValue = abs(value) < 0.0005 ? 0 : value
+        var text = String(format: "%.\(maximumFractionDigits)f", normalizedValue)
+        while text.contains(".") && text.last == "0" {
+            text.removeLast()
+        }
+        if text.last == "." {
+            text.removeLast()
+        }
+        return text
+    }
+
+    private static func rawVendorValue(from displayValue: String) -> UInt32? {
+        let trimmed = displayValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("Vendor(0x"), trimmed.hasSuffix(")") {
+            let start = trimmed.index(trimmed.startIndex, offsetBy: 9)
+            let end = trimmed.index(before: trimmed.endIndex)
+            return UInt32(trimmed[start..<end], radix: 16)
+        }
+        return UInt32(trimmed)
+    }
+
+    private static func vendorOrRaw(_ rawValue: UInt32) -> String {
+        if rawValue >= 0x8000 {
+            return "Vendor(\(PTPDiagnostics.hex(rawValue)))"
+        }
+        return "\(rawValue)"
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
 
@@ -174,6 +460,18 @@ struct NikonZ6IIIPropertyMapper {
     init(mappings: [CameraParameter: NikonCameraPropertyMapping] = Self.defaultMappings) {
         self.mappings = mappings
     }
+
+    static let defaultShutterDisplays: [UInt32: String] = [
+        NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 25): "1/25",
+        NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 30): "1/30",
+        NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 48): "1/48",
+        NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 50): "1/50",
+        NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 60): "1/60",
+        NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 100): "1/100",
+        NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 120): "1/120",
+        NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 125): "1/125",
+        NikonCameraPropertyMapping.nikonExposureTimeRaw(numerator: 1, denominator: 250): "1/250"
+    ]
 
     static let defaultMappings: [CameraParameter: NikonCameraPropertyMapping] = [
         .exposureMode: NikonCameraPropertyMapping(
@@ -192,9 +490,9 @@ struct NikonZ6IIIPropertyMapper {
         ),
         .shutter: NikonCameraPropertyMapping(
             parameter: .shutter,
-            propertyCode: 0x500D,
+            propertyCode: NikonPTPDeviceProperty.nikonExposureTime,
             dataType: .unsignedInt32,
-            rawToDisplay: [400: "1/25", 200: "1/50", 167: "1/60", 100: "1/100", 80: "1/125", 40: "1/250"],
+            rawToDisplay: defaultShutterDisplays,
             isWriteApproved: true
         ),
         .aperture: NikonCameraPropertyMapping(
@@ -208,14 +506,22 @@ struct NikonZ6IIIPropertyMapper {
             parameter: .whiteBalance,
             propertyCode: 0x5005,
             dataType: .unsignedInt16,
-            rawToDisplay: [2: "Auto", 4: "5600K", 6: "6500K", 7: "3200K", 32784: "4300K"],
+            rawToDisplay: [2: "Auto", 4: "5600K", 5: "4300K", 6: "3200K", 7: "6500K"],
             isWriteApproved: true
         ),
         .focusMode: NikonCameraPropertyMapping(
             parameter: .focusMode,
             propertyCode: 0x500A,
             dataType: .unsignedInt16,
-            rawToDisplay: [1: "MF", 2: "AF-S", 3: "AF-C"],
+            rawToDisplay: [
+                1: "MF",
+                2: "Auto",
+                3: "Auto macro",
+                0x8010: "AF-S",
+                0x8011: "AF-C",
+                0x8012: "AF-A",
+                0x8013: "AF-F"
+            ],
             isWriteApproved: true
         )
     ]
@@ -267,8 +573,7 @@ struct NikonZ6IIIPropertyMapper {
         }
 
         guard let descriptor = descriptors[parameter] else {
-            let options = mapping.rawToDisplay.keys.sorted().map(mapping.displayValue)
-            return CameraValue(current: options.first ?? "Unknown", options: options, isWritable: false)
+            return CameraValue(current: "--", options: [], isWritable: false)
         }
 
         let rawOptions = rawOptions(for: mapping, descriptor: descriptor)
@@ -286,12 +591,28 @@ struct NikonZ6IIIPropertyMapper {
         }
 
         if let permittedRange = descriptor.permittedRange {
+            let rangedOptions = steppedValues(in: permittedRange, step: descriptor.permittedStep)
+            if !rangedOptions.isEmpty, rangedOptions.count <= 80 {
+                return rangedOptions
+            }
             return mapping.rawToDisplay.keys
                 .filter { descriptor.permits($0) && permittedRange.contains($0) }
                 .sorted()
         }
 
         return mapping.rawToDisplay.keys.sorted()
+    }
+
+    private func steppedValues(in range: ClosedRange<UInt32>, step: UInt32?) -> [UInt32] {
+        let resolvedStep = max(step ?? 1, 1)
+        var values: [UInt32] = []
+        var value = range.lowerBound
+        while value <= range.upperBound, values.count <= 80 {
+            values.append(value)
+            guard UInt32.max - value >= resolvedStep else { break }
+            value += resolvedStep
+        }
+        return values
     }
 }
 
@@ -303,6 +624,7 @@ enum NikonCameraRuntimeError: Error, Equatable, LocalizedError {
     case unsupportedAction(CameraAction)
     case readbackMismatch(parameter: CameraParameter, expected: String, actual: String)
     case parameterWriteFailed(CameraParameterWriteDiagnostic)
+    case parameterWriteReadbackMismatch(CameraParameterWriteDiagnostic, CameraState)
 
     var errorDescription: String? {
         switch self {
@@ -320,6 +642,19 @@ enum NikonCameraRuntimeError: Error, Equatable, LocalizedError {
             return "\(parameter.title) readback mismatch after write: expected \(expected), got \(actual)."
         case .parameterWriteFailed(let diagnostic):
             return diagnostic.userMessage
+        case .parameterWriteReadbackMismatch(let diagnostic, _):
+            return diagnostic.userMessage
+        }
+    }
+}
+
+private extension PTPClientError {
+    var shouldAbortParameterSnapshot: Bool {
+        switch self {
+        case .responseError:
+            return false
+        case .missingPTPCapability, .timeout, .timedOutOperationStillInFlight, .transactionMismatch:
+            return true
         }
     }
 }
@@ -493,8 +828,8 @@ actor NikonCameraRuntime {
                 readbackValue: readbackValue,
                 blockReason: .readbackMismatch
             )
-            recordWriteDiagnostic(diagnostic, event: "camera.parameter.write.failed")
-            throw NikonCameraRuntimeError.parameterWriteFailed(diagnostic)
+            recordWriteDiagnostic(diagnostic, event: "camera.parameter.write.readbackMismatch")
+            throw NikonCameraRuntimeError.parameterWriteReadbackMismatch(diagnostic, updatedState)
         }
         let diagnostic = writeDiagnostic(
             parameter: parameter,
@@ -866,7 +1201,7 @@ actor NikonCameraRuntime {
         case .modeLock:
             return "\(parameter.title) 当前被曝光模式锁定。"
         case .readbackMismatch:
-            return "\(parameter.title) 写入后读回值不一致。"
+            return "\(parameter.title) 已由相机接受，但当前值由机身状态决定。"
         }
     }
 
@@ -883,9 +1218,41 @@ actor NikonCameraRuntime {
         var descriptors: [CameraParameter: NikonPropertyDescriptor] = [:]
         for parameter in CameraParameter.allCases {
             guard let mapping = mapper.mapping(for: parameter) else { continue }
-            descriptors[parameter] = try await readDescriptor(mapping: mapping, generation: generation)
+            do {
+                descriptors[parameter] = try await readDescriptor(mapping: mapping, generation: generation)
+            } catch NikonCameraRuntimeError.notConnected {
+                throw NikonCameraRuntimeError.notConnected
+            } catch let error as PTPClientError where error.shouldAbortParameterSnapshot {
+                throw error
+            } catch {
+                diagnosticsLog?.record("camera.parameter.read.failed", fields: readFailureFields(
+                    parameter: parameter,
+                    mapping: mapping,
+                    error: error
+                ))
+            }
         }
         return descriptors
+    }
+
+    private func readFailureFields(
+        parameter: CameraParameter,
+        mapping: NikonCameraPropertyMapping,
+        error: Error
+    ) -> [String: String] {
+        var fields = [
+            "parameter": parameter.rawValue,
+            "propertyCode": PTPDiagnostics.hex(mapping.propertyCode),
+            "propertyName": NikonPTPDeviceProperty.name(for: mapping.propertyCode),
+            "errorType": String(describing: type(of: error)),
+            "error": error.localizedDescription
+        ]
+        if let ptpError = error as? PTPClientError,
+           case .responseError(let code, let rawCode) = ptpError {
+            fields["responseCode"] = PTPDiagnostics.hex(rawCode)
+            fields["response"] = String(describing: code)
+        }
+        return fields
     }
 
     private func readDescriptor(mapping: NikonCameraPropertyMapping, generation: Int) async throws -> NikonPropertyDescriptor {

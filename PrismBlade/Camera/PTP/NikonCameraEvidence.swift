@@ -9,22 +9,29 @@ enum NikonPTPDeviceProperty {
     static let exposureProgramMode: UInt16 = 0x500E
     static let exposureIndex: UInt16 = 0x500F
 
+    // Nikon exposes the user-selectable shutter speed here; 0x500D is the generic ExposureTime value.
+    static let nikonExposureTime: UInt16 = 0xD100
+
     // Nikon vendor property exposed by libgphoto2 as LiveViewImageSize.
     static let liveViewSize: UInt16 = 0xD1AC
+
+    static let nikonVideoToneMode: UInt16 = 0xD1A2
+    static let nikonFlatPictureControl: UInt16 = 0xD1B2
+    static let nikonNLogViewAssist: UInt16 = 0xD1B3
 
     static let standardImmediateControlCodes: [CameraParameter: UInt16] = [
         .exposureMode: exposureProgramMode,
         .iso: exposureIndex,
-        .shutter: exposureTime,
+        .shutter: nikonExposureTime,
         .aperture: aperture,
         .whiteBalance: whiteBalance,
         .focusMode: focusMode
     ]
 
     static let nLogCandidateCodes: [NamedPTPPropertyCode] = [
-        NamedPTPPropertyCode(code: 0xD1A2, name: "NikonVideoToneMode"),
-        NamedPTPPropertyCode(code: 0xD1B2, name: "NikonFlatPictureControl"),
-        NamedPTPPropertyCode(code: 0xD1B3, name: "NikonNLogViewAssist")
+        NamedPTPPropertyCode(code: nikonVideoToneMode, name: "NikonVideoToneMode"),
+        NamedPTPPropertyCode(code: nikonFlatPictureControl, name: "NikonFlatPictureControl"),
+        NamedPTPPropertyCode(code: nikonNLogViewAssist, name: "NikonNLogViewAssist")
     ]
 
     static func name(for code: UInt16) -> String {
@@ -41,6 +48,8 @@ enum NikonPTPDeviceProperty {
             return "ExposureProgramMode"
         case exposureIndex:
             return "ExposureIndex"
+        case nikonExposureTime:
+            return "NikonExposureTime"
         case liveViewSize:
             return "NikonLiveViewImageSize"
         default:
@@ -69,12 +78,13 @@ enum NikonCameraEvidenceConfidence: String, Equatable, Sendable {
 
 enum NikonColorEncodingEvidence: Equatable, Sendable {
     case nLog(PropertyObservation)
+    case nLogComposite([PropertyObservation], reason: String)
     case rec709(PropertyObservation)
     case inconclusive([PropertyObservation], reason: String)
 
     var sourceColorEncoding: SourceColorEncoding? {
         switch self {
-        case .nLog:
+        case .nLog, .nLogComposite:
             return .nLog
         case .rec709:
             return .rec709
@@ -91,6 +101,13 @@ enum NikonColorEncodingEvidence: Equatable, Sendable {
                 confidence: .direct,
                 reason: "known direct Nikon/PTP color evidence",
                 observations: [observation]
+            )
+        case .nLogComposite(let observations, let reason):
+            return fields(
+                classification: "nLog",
+                confidence: .indirect,
+                reason: reason,
+                observations: observations
             )
         case .rec709(let observation):
             return fields(
@@ -318,11 +335,36 @@ struct NikonColorEncodingClassifier: Equatable, Sendable {
         var displayValue: String
     }
 
-    var directMappings: [DirectMapping]
-
-    init(directMappings: [DirectMapping] = []) {
-        self.directMappings = directMappings
+    struct CompositeMapping: Equatable, Sendable {
+        var requiredRawValues: [UInt16: String]
+        var encoding: SourceColorEncoding
+        var reason: String
     }
+
+    var directMappings: [DirectMapping]
+    var compositeMappings: [CompositeMapping]
+
+    init(
+        directMappings: [DirectMapping] = [],
+        compositeMappings: [CompositeMapping] = Self.defaultCompositeMappings
+    ) {
+        self.directMappings = directMappings
+        self.compositeMappings = compositeMappings
+    }
+
+    static let z6IIIObservedNLogCompositeMapping = CompositeMapping(
+        requiredRawValues: [
+            NikonPTPDeviceProperty.nikonVideoToneMode: "0",
+            NikonPTPDeviceProperty.nikonFlatPictureControl: "0",
+            NikonPTPDeviceProperty.nikonNLogViewAssist: "1"
+        ],
+        encoding: .nLog,
+        reason: "Observed Nikon Z6III N-Log hardware evidence from iPhone/PTP diagnostics."
+    )
+
+    static let defaultCompositeMappings = [
+        z6IIIObservedNLogCompositeMapping
+    ]
 
     func classify(_ observations: [PropertyObservation]) -> NikonColorEncodingEvidence {
         for observation in observations {
@@ -350,10 +392,38 @@ struct NikonColorEncodingClassifier: Equatable, Sendable {
             }
         }
 
+        for mapping in compositeMappings {
+            guard compositeMappingMatches(mapping, observations: observations) else { continue }
+            let mappedObservations = observations.filter { observation in
+                mapping.requiredRawValues[observation.code] != nil
+            }
+            switch mapping.encoding {
+            case .nLog:
+                return .nLogComposite(mappedObservations, reason: mapping.reason)
+            case .rec709:
+                if let observation = mappedObservations.first {
+                    return .rec709(observation)
+                }
+            case .unknown, .hlg:
+                break
+            }
+        }
+
         return .inconclusive(
             observations,
             reason: "No candidate property had a known direct N-Log or Rec.709 raw value."
         )
+    }
+
+    private func compositeMappingMatches(_ mapping: CompositeMapping, observations: [PropertyObservation]) -> Bool {
+        for (propertyCode, rawValue) in mapping.requiredRawValues {
+            guard observations.contains(where: { observation in
+                observation.code == propertyCode && observation.currentValue?.raw == rawValue
+            }) else {
+                return false
+            }
+        }
+        return true
     }
 }
 

@@ -32,6 +32,55 @@ final class NikonCameraEvidenceTests: XCTestCase {
         XCTAssertEqual(evidence.evidenceFields["colorObservation0.current.raw"], "7")
     }
 
+    func testColorClassifierRecognizesObservedZ6IIINLogCompositeEvidence() {
+        let observations = [
+            nLogCandidateObservation(
+                code: NikonPTPDeviceProperty.nikonVideoToneMode,
+                name: "NikonVideoToneMode",
+                rawValue: 0
+            ),
+            nLogCandidateObservation(
+                code: NikonPTPDeviceProperty.nikonFlatPictureControl,
+                name: "NikonFlatPictureControl",
+                rawValue: 0
+            ),
+            nLogCandidateObservation(
+                code: NikonPTPDeviceProperty.nikonNLogViewAssist,
+                name: "NikonNLogViewAssist",
+                rawValue: 1
+            )
+        ]
+
+        let evidence = NikonColorEncodingClassifier().classify(observations)
+
+        XCTAssertEqual(evidence.sourceColorEncoding, .nLog)
+        XCTAssertEqual(evidence.evidenceFields["colorEncoding"], "nLog")
+        XCTAssertEqual(evidence.evidenceFields["colorConfidence"], "indirect")
+        XCTAssertEqual(evidence.evidenceFields["colorObservationCount"], "3")
+        XCTAssertEqual(evidence.evidenceFields["colorObservation2.current.raw"], "1")
+    }
+
+    func testColorClassifierKeepsPartialZ6IIINLogEvidenceInconclusive() {
+        let observations = [
+            nLogCandidateObservation(
+                code: NikonPTPDeviceProperty.nikonVideoToneMode,
+                name: "NikonVideoToneMode",
+                rawValue: 0
+            ),
+            nLogCandidateObservation(
+                code: NikonPTPDeviceProperty.nikonFlatPictureControl,
+                name: "NikonFlatPictureControl",
+                rawValue: 0
+            )
+        ]
+
+        let evidence = NikonColorEncodingClassifier().classify(observations)
+
+        XCTAssertNil(evidence.sourceColorEncoding)
+        XCTAssertEqual(evidence.evidenceFields["colorEncoding"], "inconclusive")
+        XCTAssertEqual(evidence.evidenceFields["colorObservationCount"], "2")
+    }
+
     func testLiveViewSessionEvidenceSerializesFrameSizeAndSelection() {
         let selected = PropertyValueObservation(raw: "2", display: "1920x1080")
         let sizeEvidence = NikonLiveViewSizeEvidence(
@@ -119,5 +168,25 @@ final class NikonCameraEvidenceTests: XCTestCase {
         XCTAssertEqual(fields["attempted.display"], "800")
         XCTAssertEqual(fields["readback.raw"], "400")
         XCTAssertEqual(fields["blockReason"], "readbackMismatch")
+    }
+
+    private func nLogCandidateObservation(
+        code: UInt16,
+        name: String,
+        rawValue: UInt32
+    ) -> PropertyObservation {
+        PropertyObservation(
+            code: code,
+            name: name,
+            access: "readOnly",
+            currentValue: PropertyValueObservation(raw: "\(rawValue)", display: "\(rawValue)"),
+            permittedValues: [],
+            permittedRange: PropertyValueRangeObservation(
+                minimum: PropertyValueObservation(raw: "0", display: "0"),
+                maximum: PropertyValueObservation(raw: "1", display: "1"),
+                step: PropertyValueObservation(raw: "1", display: "1")
+            ),
+            reason: "Read during live-view session evidence startup."
+        )
     }
 }
